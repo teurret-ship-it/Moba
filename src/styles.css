@@ -1,0 +1,520 @@
+/*
+ * HUD i ekrany.
+ *
+ * Zasady, które wynikają z sekcji 1 („mobile, jedna ręka, przerywane
+ * granie") i nie są kwestią gustu:
+ *  - nic klikalnego bliżej niż 44 px od krawędzi kciuka,
+ *  - żaden element HUD nie może przechwytywać dotyku areny (pointer-events),
+ *  - safe-area — na telefonach z notchem HUD inaczej ląduje pod wycięciem,
+ *  - kontrast wysoki: gra bywa oglądana w słońcu na tanim ekranie.
+ */
+
+:root {
+  --bg: #0b0e15;
+  --panel: rgba(14, 18, 27, 0.86);
+  --border: rgba(255, 255, 255, 0.12);
+  --text: #e8edf6;
+  --muted: #93a0b5;
+  --accent: #4fc3f7;
+  --danger: #ff6b6b;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+}
+
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  /* Blokada przewijania i pull-to-refresh — gest ruchu nie może przewijać strony. */
+  overscroll-behavior: none;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+#scene {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  touch-action: none;
+}
+
+#ui {
+  position: fixed;
+  inset: 0;
+  /* Warstwa UI domyślnie przezroczysta dla dotyku — łapią tylko przyciski. */
+  pointer-events: none;
+}
+
+/* ===== Górny pasek ===== */
+
+#hud-top {
+  position: absolute;
+  top: calc(var(--safe-top) + 10px);
+  left: calc(var(--safe-left) + 12px);
+  right: calc(var(--safe-right) + 12px);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.hud-chip {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  backdrop-filter: blur(6px);
+}
+
+.hud-chip-label {
+  font-size: 11px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.hud-chip-value {
+  font-size: 17px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.hud-timer {
+  padding: 5px 16px;
+  border-radius: 999px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  font-size: 19px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  backdrop-filter: blur(6px);
+}
+
+.hud-timer.is-urgent {
+  color: var(--danger);
+  border-color: rgba(255, 107, 107, 0.5);
+  animation: pulse 1s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  50% { opacity: 0.55; }
+}
+
+/* ===== Killfeed ===== */
+
+#hud-killfeed {
+  position: absolute;
+  top: calc(var(--safe-top) + 58px);
+  right: calc(var(--safe-right) + 12px);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.killfeed-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  background: rgba(10, 13, 20, 0.72);
+  font-size: 12px;
+  font-weight: 600;
+  animation: slideIn 0.18s ease-out;
+}
+
+.killfeed-sep {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+@keyframes slideIn {
+  from { opacity: 0; transform: translateX(14px); }
+}
+
+/* ===== Komunikaty ===== */
+
+#hud-banner {
+  position: absolute;
+  top: 24%;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 9px 22px;
+  border-radius: 10px;
+  background: rgba(10, 13, 20, 0.82);
+  border: 1px solid var(--border);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  animation: slideDown 0.2s ease-out;
+}
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translate(-50%, -10px); }
+}
+
+#hud-warmup {
+  position: absolute;
+  top: 38%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 78px;
+  font-weight: 800;
+  color: rgba(255, 255, 255, 0.9);
+  text-shadow: 0 4px 24px rgba(0, 0, 0, 0.7);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Czerwony błysk przy trafieniu — czytelny bez patrzenia na pasek HP. */
+#hud-hurt {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  background: radial-gradient(ellipse at center, transparent 45%, rgba(220, 40, 40, 0.55) 100%);
+}
+
+#hud-hurt.is-active {
+  animation: hurt 0.32s ease-out;
+}
+
+@keyframes hurt {
+  0% { opacity: 0.9; }
+  100% { opacity: 0; }
+}
+
+/* ===== Pasek zdrowia ===== */
+
+#hud-bottom {
+  position: absolute;
+  bottom: calc(var(--safe-bottom) + 122px);
+  left: calc(var(--safe-left) + 16px);
+  width: min(46%, 230px);
+}
+
+#hud-hp {
+  position: relative;
+  height: 22px;
+  border-radius: 6px;
+  background: rgba(10, 13, 20, 0.78);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+#hud-hp-fill {
+  height: 100%;
+  width: 100%;
+  transition: width 0.12s linear, background-color 0.2s linear;
+  background: #58c96a;
+}
+
+#hud-hp-fill[data-level='warn'] { background: #e0c357; }
+#hud-hp-fill[data-level='low'] { background: #e05f5f; }
+
+#hud-hp-text {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+}
+
+/* ===== Gałka ===== */
+
+#joystick {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 132px;
+  height: 132px;
+  margin: -66px 0 0 -66px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+#joystick-knob {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 56px;
+  height: 56px;
+  margin: -28px 0 0 -28px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.26);
+  border: 2px solid rgba(255, 255, 255, 0.5);
+}
+
+/* ===== Przyciski akcji ===== */
+
+#buttons {
+  position: absolute;
+  right: calc(var(--safe-right) + 18px);
+  bottom: calc(var(--safe-bottom) + 26px);
+  display: grid;
+  grid-template-columns: repeat(2, auto);
+  gap: 12px;
+  align-items: end;
+  justify-items: center;
+  pointer-events: auto;
+}
+
+.action-btn {
+  position: relative;
+  width: 66px;
+  height: 66px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.22);
+  background: rgba(22, 28, 40, 0.9);
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  font-family: inherit;
+  overflow: hidden;
+  transition: transform 0.07s ease-out, background-color 0.12s;
+}
+
+.action-btn--big {
+  width: 84px;
+  height: 84px;
+  grid-row: span 2;
+  border-color: rgba(79, 195, 247, 0.5);
+}
+
+.action-btn.is-pressed {
+  transform: scale(0.92);
+  background: rgba(60, 84, 116, 0.95);
+}
+
+.action-glyph {
+  font-size: 21px;
+  line-height: 1;
+}
+
+.action-name {
+  font-size: 9px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Nakładka odliczania — conic-gradient odsłania przycisk zgodnie z --cd. */
+.cd {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 17px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.85);
+  background: conic-gradient(
+    rgba(6, 9, 14, 0.78) calc(var(--cd, 0) * 360deg),
+    transparent 0
+  );
+  pointer-events: none;
+}
+
+.action-btn.is-cooling {
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+/* ===== Debug ===== */
+
+#hud-debug {
+  position: absolute;
+  top: calc(var(--safe-top) + 58px);
+  left: calc(var(--safe-left) + 12px);
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(6, 9, 14, 0.82);
+  border: 1px solid var(--border);
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 10px;
+  line-height: 1.55;
+  color: #9fe6b0;
+  white-space: pre;
+}
+
+/* ===== Ekrany ===== */
+
+.screen {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: calc(var(--safe-top) + 16px) 16px calc(var(--safe-bottom) + 16px);
+  background: rgba(6, 8, 13, 0.86);
+  backdrop-filter: blur(10px);
+  pointer-events: auto;
+  overflow-y: auto;
+}
+
+.screen[hidden] { display: none; }
+
+.screen-card {
+  width: min(100%, 380px);
+  padding: 26px 22px;
+  border-radius: 18px;
+  background: rgba(16, 21, 32, 0.95);
+  border: 1px solid var(--border);
+  text-align: center;
+}
+
+.screen-title {
+  margin: 0 0 6px;
+  font-size: 34px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+}
+
+.screen-title[data-result='win'] { color: #7ee08a; }
+.screen-title[data-result='loss'] { color: var(--text); }
+
+.screen-sub {
+  margin: 0 0 20px;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.howto {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 22px;
+  text-align: left;
+}
+
+.howto-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.howto-key {
+  flex: 0 0 108px;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.howto-desc { color: var(--muted); }
+
+.primary-btn {
+  width: 100%;
+  padding: 15px;
+  border: none;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #57c8f0, #2f9dcb);
+  color: #05121a;
+  font-family: inherit;
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  /* 15px pionowo + 17px tekstu = ~48px wysokości, powyżej progu dotyku. */
+}
+
+.primary-btn:active { transform: scale(0.985); }
+
+.screen-foot {
+  margin: 14px 0 0;
+  font-size: 11px;
+  color: rgba(147, 160, 181, 0.75);
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 4px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.stat-value {
+  font-size: 19px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-label {
+  font-size: 9px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.standings {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-bottom: 20px;
+}
+
+.standing-row {
+  display: grid;
+  grid-template-columns: 26px 1fr 34px 52px;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: 7px;
+  font-size: 12px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.standing-row.is-me {
+  background: rgba(79, 195, 247, 0.16);
+  outline: 1px solid rgba(79, 195, 247, 0.35);
+}
+
+.standing-place { color: var(--muted); font-weight: 700; }
+.standing-name { text-align: left; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.standing-kills { color: var(--muted); font-variant-numeric: tabular-nums; }
+.standing-score { font-weight: 700; font-variant-numeric: tabular-nums; }
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

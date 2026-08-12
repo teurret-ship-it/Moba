@@ -1,0 +1,50 @@
+name: CI
+
+# Zakres celowo minimalny. Sekcja 12 planu umieszcza pełny pipeline
+# (security gate, observability gate, deploy) w Fazie 1 — tutaj jest tylko
+# to, co chroni już istniejącą pracę: typy, testy i to, czy build przechodzi.
+#
+# Testy symulacji mają tu realną wartość: pilnują determinizmu i reguł
+# widoczności, których złamanie w Fazie 1 objawi się jako niediagnozowalne
+# „gumkowanie" i dziury w anti-cheacie.
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+
+      - name: Typy
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Testy
+        run: npm test
+
+      - name: Build
+        run: npx vite build
+
+      - name: Budżet pobrania (sekcja 4 planu — cel 15 MB, limit 20 MB)
+        run: |
+          # Sourcemapy nie trafiają do gracza, więc nie liczą się do budżetu.
+          BYTES=$(find dist -type f ! -name '*.map' -printf '%s\n' | paste -sd+ | bc)
+          MB=$(echo "scale=2; $BYTES/1048576" | bc)
+          echo "Rozmiar builda: ${MB} MB (${BYTES} B)"
+          if [ "$BYTES" -gt 15728640 ]; then
+            echo "::error::Przekroczony cel 15 MB z sekcji 4 planu"
+            exit 1
+          fi

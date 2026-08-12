@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="pl">
+  <head>
+    <meta charset="utf-8" />
+    <!-- viewport-fit=cover + safe-area w CSS: bez tego HUD chowa się pod notchem -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#0b0e15" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="description" content="Arena sesyjna — prototyp grywalności (Faza 0)" />
+    <!-- Favicon inline: zero dodatkowych żądań i żadnego 404 w konsoli. -->
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='13' fill='%234fc3f7'/%3E%3Ccircle cx='16' cy='16' r='5' fill='%230b0e15'/%3E%3C/svg%3E"
+    />
+    <title>Arena — prototyp</title>
+  </head>
+  <body>
+    <canvas id="scene"></canvas>
+
+    <div id="ui">
+      <!-- ===== HUD rozgrywki ===== -->
+      <div id="hud-top">
+        <div class="hud-chip">
+          <span class="hud-chip-label">żywi</span>
+          <span id="hud-alive" class="hud-chip-value">12</span>
+        </div>
+        <div id="hud-timer" class="hud-timer">4:00</div>
+        <div class="hud-chip">
+          <span class="hud-chip-label">elim.</span>
+          <span id="hud-kills" class="hud-chip-value">0</span>
+        </div>
+      </div>
+
+      <div id="hud-killfeed"></div>
+      <div id="hud-banner" hidden></div>
+      <div id="hud-warmup" hidden>3</div>
+      <div id="hud-hurt"></div>
+      <pre id="hud-debug" hidden></pre>
+
+      <div id="hud-bottom">
+        <div id="hud-hp">
+          <div id="hud-hp-fill" data-level="ok"></div>
+          <span id="hud-hp-text">100</span>
+        </div>
+      </div>
+
+      <!-- ===== Sterowanie ===== -->
+      <div id="joystick" hidden>
+        <div id="joystick-knob"></div>
+      </div>
+
+      <div id="buttons">
+        <button id="btn-stealth" class="action-btn" type="button" aria-label="Cień">
+          <span class="action-glyph">◍</span>
+          <span class="action-name">Cień</span>
+          <span class="cd"></span>
+        </button>
+        <button id="btn-burst" class="action-btn action-btn--big" type="button" aria-label="Fala">
+          <span class="action-glyph">✸</span>
+          <span class="action-name">Fala</span>
+          <span class="cd"></span>
+        </button>
+        <button id="btn-dash" class="action-btn" type="button" aria-label="Skok">
+          <span class="action-glyph">➤</span>
+          <span class="action-name">Skok</span>
+          <span class="cd"></span>
+        </button>
+      </div>
+
+      <!-- ===== Ekran startowy ===== -->
+      <div id="screen-start" class="screen">
+        <div class="screen-card">
+          <h1 class="screen-title">ARENA</h1>
+          <p class="screen-sub">Zostań ostatni. Cztery minuty.</p>
+
+          <div class="howto">
+            <div class="howto-row">
+              <span class="howto-key">lewa połowa ekranu</span>
+              <span class="howto-desc">ruch — przeciągnij kciukiem</span>
+            </div>
+            <div class="howto-row">
+              <span class="howto-key">atak</span>
+              <span class="howto-desc">automatyczny, gdy wróg jest w zasięgu</span>
+            </div>
+            <div class="howto-row">
+              <span class="howto-key">➤ Skok</span>
+              <span class="howto-desc">wyskocz z opresji albo dogoń</span>
+            </div>
+            <div class="howto-row">
+              <span class="howto-key">◍ Cień</span>
+              <span class="howto-desc">znikasz — dosłownie, nikt cię nie widzi</span>
+            </div>
+            <div class="howto-row">
+              <span class="howto-key">✸ Fala</span>
+              <span class="howto-desc">wybuch dookoła, odrzuca i wybija z ukrycia</span>
+            </div>
+          </div>
+
+          <button id="btn-play" class="primary-btn" type="button">Graj</button>
+          <p class="screen-foot">Prototyp Fazy 0 — bez konta, bez serwera, bez zapisu.</p>
+        </div>
+      </div>
+
+      <!-- ===== Ekran wyniku ===== -->
+      <div id="screen-over" class="screen" hidden>
+        <div class="screen-card">
+          <h2 id="over-title" class="screen-title"></h2>
+          <div id="over-stats" class="stats"></div>
+          <div id="over-standings" class="standings"></div>
+          <button id="btn-again" class="primary-btn" type="button">Jeszcze raz</button>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

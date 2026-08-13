@@ -4,6 +4,7 @@ import {
   TICK_MS,
 } from '../sim/constants.ts';
 import type { Snapshot } from '../sim/snapshot.ts';
+import { POWER_ABILITY, type ClassId } from '../sim/classes.ts';
 import { SnapshotBuffer } from '../client/interpolation.ts';
 import { Predictor } from '../client/prediction.ts';
 import { LocalTransport, NET_PROFILES, type NetSimConfig } from '../client/transport.ts';
@@ -46,6 +47,7 @@ export class Game {
   private latestSnapshot: Snapshot | null = null;
 
   private readonly localPlayerId = 0;
+  private localClass: ClassId = 'lowca';
   private names = new Map<number, string>();
   private colors = new Map<number, number>();
 
@@ -81,10 +83,12 @@ export class Game {
     document.addEventListener('visibilitychange', this.onVisibilityChange);
     window.addEventListener('keydown', this.onKeyDown);
 
-    this.screens.showStart(() => this.startMatch());
+    this.screens.showStart((classId) => this.startMatch(undefined, classId));
   }
 
-  startMatch(seed = (Math.random() * 0xffffffff) >>> 0): void {
+  startMatch(seed?: number, classId?: ClassId): void {
+    const matchSeed = seed ?? (Math.random() * 0xffffffff) >>> 0;
+    if (classId) this.localClass = classId;
     this.transport?.dispose();
     this.renderer.reset();
     this.hud.reset();
@@ -94,10 +98,11 @@ export class Game {
 
     this.transport = new LocalTransport(
       {
-        seed,
+        seed: matchSeed,
         playerCount: MAX_PLAYERS,
         humanCount: 1,
         localName: 'Ty',
+        localClass: this.localClass,
       },
       this.localPlayerId,
       this.netProfile,
@@ -139,8 +144,24 @@ export class Game {
         case 'kill':
           break;
         case 'burst':
-          this.renderer.fx.burst(e.x, e.y, 7.5, this.colors.get(e.player) ?? 0);
+          this.renderer.fx.burst(e.x, e.y, e.radius, this.colors.get(e.player) ?? 0);
           if (e.player === this.localPlayerId) this.renderer.shake(0.35);
+          break;
+        case 'rend':
+          this.renderer.fx.rend(e.x, e.y, e.facing, POWER_ABILITY.rozdarcie.range, this.colors.get(e.player) ?? 0);
+          if (e.player === this.localPlayerId) this.renderer.shake(0.2);
+          break;
+        case 'salvo': {
+          const target = snapshot.players.find((p) => p.id === e.target);
+          if (target) this.renderer.fx.tracer(e.x, e.y, target.x, target.y, this.colors.get(e.player) ?? 0);
+          break;
+        }
+        case 'shieldUp':
+          this.renderer.fx.shield(e.x, e.y, true);
+          break;
+        case 'shieldBreak':
+          this.renderer.fx.shield(e.x, e.y, false);
+          if (e.player === this.localPlayerId) this.renderer.shake(0.3);
           break;
         case 'dash':
           this.renderer.fx.dash(e.x, e.y, this.colors.get(e.player) ?? 0);

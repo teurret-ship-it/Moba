@@ -5,7 +5,6 @@ import {
   AOI_RADIUS,
   ARENA_RADIUS,
   MATCH_TICKS,
-  MAX_HP,
   PLAYER_RADIUS,
   SNAPSHOT_HZ,
   STEALTH_DURATION_TICKS,
@@ -89,7 +88,7 @@ describe('zasada zaufania i widoczność (sekcja 3 i 7)', () => {
     expect(b.hp).toBe(hpBefore);
   });
 
-  it('atak z ukrycia zdejmuje ukrycie napastnikowi', () => {
+  it('auto-atak MILCZY w ukryciu — zasadzka jest decyzją, nie przypadkiem', () => {
     const s = sim();
     s.world.phase = 'live';
     const a = s.world.players[0]!;
@@ -100,15 +99,37 @@ describe('zasada zaufania i widoczność (sekcja 3 i 7)', () => {
     a.x = 0; a.y = 0;
     b.x = 2; b.y = 0;
     a.stealthEndTick = s.world.tick + 200;
+    a.ambushReady = true;
     b.ai = undefined;
     b.cdAttack = Number.MAX_SAFE_INTEGER;
 
-    // `a` atakuje automatycznie, bo `b` jest w zasięgu — i tym samym
-    // przestaje być niewidzialny. Ukrycie ma być zasadzką, nie immunitetem.
-    for (let i = 0; i < 5; i++) s.step();
+    // Atak jest automatyczny, więc gracz nie może go powstrzymać. Gdyby
+    // strzelał w ukryciu, zdradzałby się w chwili podejścia do celu.
+    for (let i = 0; i < 10; i++) s.step();
+    expect(b.hp).toBe(b.maxHp);
+    expect(a.stealthEndTick).toBeGreaterThan(s.world.tick);
+  });
 
+  it('to własny cios wychodzi z ukrycia, nie zasięg przeciwnika', () => {
+    const s = sim();
+    s.world.phase = 'live';
+    const a = s.world.players[0]!;
+    const b = s.world.players[1]!;
+    for (const p of s.world.players) {
+      if (p.id > 1) { p.x = 1000; p.y = 1000; p.alive = false; }
+    }
+    // Łowca ma Salwę — moc, która zdradza pozycję.
+    a.x = 0; a.y = 0;
+    b.x = 3; b.y = 0;
+    a.stealthEndTick = s.world.tick + 200;
+    b.ai = undefined;
+    b.cdAttack = Number.MAX_SAFE_INTEGER;
+
+    s.pushInput(0, input({ seq: 1, burst: true }));
+    for (let i = 0; i < 10; i++) s.step();
+
+    expect(b.hp).toBeLessThan(b.maxHp);
     expect(a.stealthEndTick).toBeLessThanOrEqual(s.world.tick + 2);
-    expect(b.hp).toBeLessThan(MAX_HP);
   });
 });
 
@@ -130,12 +151,12 @@ describe('wejścia klienta', () => {
     const p = s.world.players[0]!;
     s.pushInput(0, input({ seq: 1, dash: true }));
     s.step();
-    const firstCd = p.cdDash;
+    const firstCd = p.cdMove;
     expect(firstCd).toBeGreaterThan(0);
 
     // Kolejne ticki bez nowego wejścia nie mogą odpalić skoku ponownie.
     for (let i = 0; i < 5; i++) s.step();
-    expect(p.cdDash).toBe(firstCd);
+    expect(p.cdMove).toBe(firstCd);
   });
 });
 
@@ -158,7 +179,7 @@ describe('ograniczenia świata', () => {
       s.step();
       for (const p of s.world.players) {
         expect(p.hp).toBeGreaterThanOrEqual(0);
-        expect(p.hp).toBeLessThanOrEqual(MAX_HP);
+        expect(p.hp).toBeLessThanOrEqual(p.maxHp);
       }
       if (s.world.phase === 'over') break;
     }

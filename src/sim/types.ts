@@ -6,6 +6,8 @@
  * (sekcja 7). Timery w ms rozjeżdżają się przy rekoncyliacji.
  */
 
+import type { ClassId } from './classes.ts';
+
 export type PlayerId = number;
 
 /** Jedyne, co klient ma prawo twierdzić (sekcja 3: zasada zaufania). */
@@ -33,6 +35,7 @@ export interface PlayerState {
   name: string;
   isBot: boolean;
   colorIndex: number;
+  classId: ClassId;
 
   x: number;
   y: number;
@@ -42,6 +45,8 @@ export interface PlayerState {
   facing: number;
 
   hp: number;
+  /** Z klasy — nie stała globalna, bo Kolos ma 150, a Widmo 82. */
+  maxHp: number;
   alive: boolean;
   /** Tick śmierci (-1 gdy żyje) — do kolejności na tablicy wyników. */
   deathTick: number;
@@ -49,15 +54,35 @@ export interface PlayerState {
   lastHitBy: PlayerId;
   lastHitTick: number;
 
-  // Timery (tick, w którym efekt się kończy / umiejętność jest gotowa)
+  // Timery (tick, w którym efekt się kończy / umiejętność jest gotowa).
+  // Nazwy są slotowe, nie nazwane po konkretnej umiejętności: w slocie
+  // RUCH siedzi Skok, Szarża albo Mgnienie i wszystkie dzielą te pola.
   dashEndTick: number;
   dashDirX: number;
   dashDirY: number;
+  /** Kogo już trafiła bieżąca Szarża — żeby nie zadawała obrażeń co tick. */
+  dashHits: PlayerId[];
+
   stealthEndTick: number;
-  burstFireTick: number;
-  cdDash: number;
-  cdStealth: number;
-  cdBurst: number;
+  /** Tarcza: ile obrażeń jeszcze pochłonie i do kiedy działa. */
+  shieldHp: number;
+  shieldEndTick: number;
+
+  /** Slot MOCY: tick detonacji (Fala/Rozdarcie) lub startu Salwy. */
+  powerFireTick: number;
+  /** Salwa: ile strzałów zostało i kiedy następny. */
+  salvoLeft: number;
+  salvoNextTick: number;
+  salvoTargetId: PlayerId;
+  /**
+   * Czy następny cios liczy się jako zasadzka (wyjście z ukrycia).
+   * Ustawiane przy wejściu w Cień, zdejmowane po pierwszym trafieniu.
+   */
+  ambushReady: boolean;
+
+  cdMove: number;
+  cdTrick: number;
+  cdPower: number;
   cdAttack: number;
 
   // Buffy z dropów
@@ -120,7 +145,11 @@ export type SimEvent =
   | { type: 'dash'; player: PlayerId; x: number; y: number; tick: number }
   | { type: 'stealthIn'; player: PlayerId; x: number; y: number; tick: number }
   | { type: 'stealthOut'; player: PlayerId; x: number; y: number; tick: number }
-  | { type: 'burst'; player: PlayerId; x: number; y: number; tick: number }
+  | { type: 'burst'; player: PlayerId; x: number; y: number; radius: number; tick: number }
+  | { type: 'rend'; player: PlayerId; x: number; y: number; facing: number; tick: number }
+  | { type: 'salvo'; player: PlayerId; x: number; y: number; target: PlayerId; tick: number }
+  | { type: 'shieldUp'; player: PlayerId; x: number; y: number; tick: number }
+  | { type: 'shieldBreak'; player: PlayerId; x: number; y: number; tick: number }
   | { type: 'pickup'; player: PlayerId; kind: PickupKind; x: number; y: number; tick: number }
   | { type: 'supplyWarn'; x: number; y: number; tick: number }
   | { type: 'supplyDrop'; x: number; y: number; tick: number }

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import type { ClassId } from '../sim/classes.ts';
 
 /**
  * Grafika proceduralna.
@@ -49,8 +50,8 @@ function toTexture(c: HTMLCanvasElement, key: string): THREE.Texture {
  * Kształt kropli z ciemnym konturem — czytelny na każdym tle, także
  * gdy pod postacią leży drop.
  */
-export function getCharacterTexture(colorIndex: number): THREE.Texture {
-  const key = `char:${colorIndex}`;
+export function getCharacterTexture(colorIndex: number, classId: ClassId = 'lowca'): THREE.Texture {
+  const key = `char:${colorIndex}:${classId}`;
   const hit = cache.get(key);
   if (hit) return hit;
 
@@ -62,9 +63,19 @@ export function getCharacterTexture(colorIndex: number): THREE.Texture {
   const cy = size * 0.56;
   const r = size * 0.3;
 
+  // Sylwetka niesie klasę: Kolos jest kanciasty i barczysty, Widmo
+  // spiczaste, Łowca okrągły. Rozmiar robi renderer — tu chodzi o to,
+  // żeby kształt dało się odczytać także u dwóch graczy tego samego koloru.
+  const outline = (grow: number) => {
+    ctx.beginPath();
+    if (classId === 'kolos') roundedHex(ctx, cx, cy, r + grow);
+    else if (classId === 'widmo') shard(ctx, cx, cy, r + grow);
+    else ctx.arc(cx, cy, r + grow, 0, Math.PI * 2);
+    ctx.closePath();
+  };
+
   // Kontur
-  ctx.beginPath();
-  ctx.arc(cx, cy, r + 5, 0, Math.PI * 2);
+  outline(5);
   ctx.fillStyle = 'rgba(8,10,16,0.92)';
   ctx.fill();
 
@@ -73,8 +84,7 @@ export function getCharacterTexture(colorIndex: number): THREE.Texture {
   grad.addColorStop(0, lighten(color, 0.35));
   grad.addColorStop(0.55, color);
   grad.addColorStop(1, darken(color, 0.4));
-  ctx.beginPath();
-  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  outline(0);
   ctx.fillStyle = grad;
   ctx.fill();
 
@@ -280,6 +290,25 @@ export function disposeTextures(): void {
 }
 
 // --- pomocnicze kolory ------------------------------------------------------
+
+/** Sześciokąt o zaokrąglonych rogach — barczysta sylwetka Kolosa. */
+function roundedHex(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number): void {
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2 + Math.PI / 6;
+    const x = cx + Math.cos(a) * r;
+    const y = cy + Math.sin(a) * r * 0.95;
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+}
+
+/** Pionowy romb zwężony u dołu — smukła, niepokojąca sylwetka Widma. */
+function shard(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number): void {
+  ctx.moveTo(cx, cy - r * 1.15);
+  ctx.lineTo(cx + r * 0.82, cy - r * 0.1);
+  ctx.lineTo(cx, cy + r * 1.15);
+  ctx.lineTo(cx - r * 0.82, cy - r * 0.1);
+}
 
 function parseHex(hex: string): [number, number, number] {
   const h = hex.replace('#', '');

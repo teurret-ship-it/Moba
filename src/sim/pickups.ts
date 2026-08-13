@@ -1,5 +1,4 @@
 import {
-  MAX_HP,
   PICKUP_BUFF_DURATION_TICKS,
   PICKUP_HEAL_AMOUNT,
   PICKUP_MAX_ACTIVE,
@@ -87,7 +86,7 @@ function collectPickups(world: World): void {
       if (Math.hypot(p.x - item.x, p.y - item.y) > reach) continue;
       // Leczenie przy pełnym HP nie jest podnoszone — inaczej gracze
       // zbierają apteczki „na zapas" i drop przestaje być decyzją.
-      if (item.kind === 'heal' && p.hp >= MAX_HP) continue;
+      if (item.kind === 'heal' && p.hp >= p.maxHp) continue;
 
       applyPickup(world, p.id, item.kind);
       world.events.push({
@@ -109,7 +108,7 @@ export function applyPickup(world: World, playerId: number, kind: PickupKind): v
   if (!p) return;
   switch (kind) {
     case 'heal':
-      p.hp = Math.min(MAX_HP, p.hp + PICKUP_HEAL_AMOUNT);
+      p.hp = Math.min(p.maxHp, p.hp + PICKUP_HEAL_AMOUNT);
       break;
     case 'speed':
       p.speedBuffEndTick = world.tick + PICKUP_BUFF_DURATION_TICKS;

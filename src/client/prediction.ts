@@ -1,5 +1,5 @@
 import { DT, TICK_HZ } from '../sim/constants.ts';
-import { applyMovement, tryStartDash } from '../sim/movement.ts';
+import { applyMovement, tryStartMove } from '../sim/movement.ts';
 import type { InputFrame, PlayerState } from '../sim/types.ts';
 import type { SelfView, Snapshot } from '../sim/snapshot.ts';
 
@@ -55,7 +55,7 @@ export class Predictor {
     let tick = snapshot.tick;
     for (const input of this.pending) {
       tick++;
-      tryStartDash(this.state, input, tick);
+      tryStartMove(this.state, input, tick);
       applyMovement(this.state, input, tick);
     }
 
@@ -83,7 +83,7 @@ export class Predictor {
   predict(input: InputFrame): void {
     if (!this.state) return;
     this.lastServerTick++;
-    tryStartDash(this.state, input, this.lastServerTick);
+    tryStartMove(this.state, input, this.lastServerTick);
     applyMovement(this.state, input, this.lastServerTick);
   }
 
@@ -128,12 +128,14 @@ function fromSelfView(self: SelfView): PlayerState {
     name: '',
     isBot: false,
     colorIndex: 0,
+    classId: self.classId,
     x: self.x,
     y: self.y,
     vx: self.vx,
     vy: self.vy,
     facing: self.facing,
     hp: self.hp,
+    maxHp: self.maxHp,
     alive: self.alive,
     deathTick: -1,
     lastHitBy: -1,
@@ -141,11 +143,21 @@ function fromSelfView(self: SelfView): PlayerState {
     dashEndTick: self.dashEndTick,
     dashDirX: self.dashDirX,
     dashDirY: self.dashDirY,
+    dashHits: [],
+
     stealthEndTick: self.stealthEndTick,
-    burstFireTick: -1,
-    cdDash: self.cdDash,
-    cdStealth: self.cdStealth,
-    cdBurst: self.cdBurst,
+    shieldHp: self.shieldHp,
+    shieldEndTick: -1,
+
+    powerFireTick: -1,
+    salvoLeft: 0,
+    salvoNextTick: -1,
+    salvoTargetId: -1,
+    ambushReady: false,
+
+    cdMove: self.cdMove,
+    cdTrick: self.cdTrick,
+    cdPower: self.cdPower,
     cdAttack: 0,
     speedBuffEndTick: self.speedBuffEndTick,
     damageBuffEndTick: self.damageBuffEndTick,

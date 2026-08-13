@@ -1,12 +1,13 @@
+import { MATCH_TICKS, TICK_HZ, WARMUP_TICKS } from '../sim/constants.ts';
 import {
-  BURST_COOLDOWN_TICKS,
-  DASH_COOLDOWN_TICKS,
-  MATCH_TICKS,
-  MAX_HP,
-  STEALTH_COOLDOWN_TICKS,
-  TICK_HZ,
-  WARMUP_TICKS,
-} from '../sim/constants.ts';
+  ABILITY_GLYPHS,
+  ABILITY_NAMES,
+  getClass,
+  MOVE_ABILITY,
+  POWER_ABILITY,
+  TRICK_ABILITY,
+  type ClassId,
+} from '../sim/classes.ts';
 import type { Snapshot } from '../sim/snapshot.ts';
 import type { SimEvent } from '../sim/types.ts';
 import { PLAYER_COLORS } from '../render/textures.ts';
@@ -37,6 +38,7 @@ export class Hud {
     killFeed: HTMLElement;
     banner: HTMLElement;
     hurt: HTMLElement;
+    hpShield: HTMLElement;
     cdDash: HTMLElement;
     cdStealth: HTMLElement;
     cdBurst: HTMLElement;
@@ -47,6 +49,7 @@ export class Hud {
   };
 
   private bannerUntil = 0;
+  private shownClass: ClassId | null = null;
 
   constructor(root: HTMLElement) {
     this.el = {
@@ -58,6 +61,7 @@ export class Hud {
       killFeed: must(root, '#hud-killfeed'),
       banner: must(root, '#hud-banner'),
       hurt: must(root, '#hud-hurt'),
+      hpShield: must(root, '#hud-hp-shield'),
       cdDash: must(root, '#btn-dash .cd'),
       cdStealth: must(root, '#btn-stealth .cd'),
       cdBurst: must(root, '#btn-burst .cd'),
@@ -80,15 +84,29 @@ export class Hud {
     this.el.alive.textContent = String(snapshot.aliveCount);
 
     if (self) {
-      const frac = Math.max(0, self.hp / MAX_HP);
+      const cls = getClass(self.classId);
+      // Etykiety przycisków zależą od klasy — ustawiamy je raz, gdy klasa
+      // się zmienia, a nie co klatkę.
+      if (this.shownClass !== self.classId) {
+        this.shownClass = self.classId;
+        this.labelButtons(self.classId);
+      }
+
+      const frac = Math.max(0, self.hp / self.maxHp);
       this.el.hpFill.style.width = `${frac * 100}%`;
       this.el.hpFill.dataset.level = frac > 0.5 ? 'ok' : frac > 0.25 ? 'warn' : 'low';
       this.el.hpText.textContent = String(Math.ceil(Math.max(0, self.hp)));
+
+      // Tarcza rysowana jako nakładka na pasku HP — Kolos musi widzieć,
+      // ile jeszcze wytrzyma, bez patrzenia na postać.
+      const shieldFrac = Math.max(0, Math.min(1, self.shieldHp / self.maxHp));
+      this.el.hpShield.style.width = `${shieldFrac * 100}%`;
+      this.el.hpShield.hidden = shieldFrac <= 0;
       this.el.kills.textContent = String(self.kills);
 
-      this.setCooldown(this.el.cdDash, self.cdDash, snapshot.tick, DASH_COOLDOWN_TICKS);
-      this.setCooldown(this.el.cdStealth, self.cdStealth, snapshot.tick, STEALTH_COOLDOWN_TICKS);
-      this.setCooldown(this.el.cdBurst, self.cdBurst, snapshot.tick, BURST_COOLDOWN_TICKS);
+      this.setCooldown(this.el.cdDash, self.cdMove, snapshot.tick, MOVE_ABILITY[cls.move].cooldownTicks);
+      this.setCooldown(this.el.cdStealth, self.cdTrick, snapshot.tick, TRICK_ABILITY[cls.trick].cooldownTicks);
+      this.setCooldown(this.el.cdBurst, self.cdPower, snapshot.tick, POWER_ABILITY[cls.power].cooldownTicks);
     }
 
     // Odliczanie startu.
@@ -136,6 +154,14 @@ export class Hud {
           break;
       }
     }
+  }
+
+  /** Podmiana nazw i symboli na przyciskach zgodnie z klasą. */
+  private labelButtons(classId: ClassId): void {
+    const cls = getClass(classId);
+    setButton(this.el.cdDash, cls.move);
+    setButton(this.el.cdStealth, cls.trick);
+    setButton(this.el.cdBurst, cls.power);
   }
 
   setDebug(lines: string[]): void {
@@ -224,6 +250,17 @@ export class Hud {
     this.el.banner.hidden = true;
     this.el.warmup.hidden = true;
   }
+}
+
+/** Ustawia symbol i nazwę na przycisku (rodzeństwo elementu `.cd`). */
+function setButton(cdEl: HTMLElement, ability: keyof typeof ABILITY_NAMES): void {
+  const btn = cdEl.parentElement;
+  if (!btn) return;
+  const glyph = btn.querySelector<HTMLElement>('.action-glyph');
+  const name = btn.querySelector<HTMLElement>('.action-name');
+  if (glyph) glyph.textContent = ABILITY_GLYPHS[ability];
+  if (name) name.textContent = ABILITY_NAMES[ability];
+  btn.setAttribute('aria-label', ABILITY_NAMES[ability]);
 }
 
 function must(root: HTMLElement, selector: string): HTMLElement {

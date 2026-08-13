@@ -1,6 +1,25 @@
 import { TICK_HZ } from '../sim/constants.ts';
+import {
+  ABILITY_GLYPHS,
+  ABILITY_NAMES,
+  CLASS_IDS,
+  getClass,
+  type ClassId,
+} from '../sim/classes.ts';
 import type { MatchResult } from '../sim/types.ts';
 import { PLAYER_COLORS } from '../render/textures.ts';
+
+/** Jedno zdanie na umiejętność — czytane raz, przed pierwszą rundą. */
+const ABILITY_HINTS: Record<string, string> = {
+  skok: 'krótki wyskok — wyjdź z opresji albo dogoń',
+  szarza: 'wjeżdżasz w tłum, tratując i odrzucając po drodze',
+  mgnienie: 'teleport — nie da się cię trafić w locie',
+  cien: 'znikasz naprawdę: przeciwnik przestaje cię widzieć',
+  tarcza: 'bańka, która pochłania obrażenia zamiast ciebie',
+  salwa: 'trzy szybkie strzały w jeden cel, z dystansu',
+  fala: 'wybuch dookoła — odrzuca i wybija z ukrycia',
+  rozdarcie: 'cięcie przed sobą; z ukrycia boli podwójnie',
+};
 
 /**
  * Ekrany poza rozgrywką: start i wynik.
@@ -13,6 +32,9 @@ import { PLAYER_COLORS } from '../render/textures.ts';
 
 export class Screens {
   private readonly start: HTMLElement;
+  private readonly classPick: HTMLElement;
+  private readonly howto: Record<'move' | 'trick' | 'power', HTMLElement>;
+  private selectedClass: ClassId = 'lowca';
   private readonly over: HTMLElement;
   private readonly overTitle: HTMLElement;
   private readonly overStats: HTMLElement;
@@ -20,22 +42,87 @@ export class Screens {
 
   constructor(root: HTMLElement) {
     this.start = required(root, '#screen-start');
+    this.classPick = required(root, '#class-pick');
+    this.howto = {
+      move: required(root, '#howto-move'),
+      trick: required(root, '#howto-trick'),
+      power: required(root, '#howto-power'),
+    };
+    this.buildClassPicker();
     this.over = required(root, '#screen-over');
     this.overTitle = required(root, '#over-title');
     this.overStats = required(root, '#over-stats');
     this.standings = required(root, '#over-standings');
   }
 
-  showStart(onPlay: () => void): void {
+  showStart(onPlay: (classId: ClassId) => void): void {
     this.start.hidden = false;
     this.over.hidden = true;
     const button = this.start.querySelector<HTMLButtonElement>('#btn-play');
     if (button) {
       button.onclick = () => {
         this.start.hidden = true;
-        onPlay();
+        onPlay(this.selectedClass);
       };
     }
+  }
+
+  get chosenClass(): ClassId {
+    return this.selectedClass;
+  }
+
+  /**
+   * Karty wyboru postaci.
+   *
+   * Statystyki są pokazane jako trzy słupki, nie liczby: „150 HP" nic nie
+   * znaczy przed pierwszą rundą, a trzy paski od razu mówią, że Kolos jest
+   * twardy i wolny. Liczby wracają, gdy gracz będzie miał do czego ich odnieść.
+   */
+  private buildClassPicker(): void {
+    this.classPick.innerHTML = '';
+
+    for (const id of CLASS_IDS) {
+      const cls = getClass(id);
+      const card = document.createElement('button');
+      card.type = 'button';
+      card.className = 'class-card';
+      card.setAttribute('role', 'radio');
+      card.setAttribute('aria-checked', String(id === this.selectedClass));
+      card.innerHTML = `
+        <span class="class-mark">${classMark(id)}</span>
+        <span class="class-name">${escapeHtml(cls.name)}</span>
+        <span class="class-stat">${bar('ŻYW', cls.maxHp, 60, 160)}</span>
+        <span class="class-stat">${bar('SZYB', cls.speed, 7.5, 11)}</span>
+        <span class="class-stat">${bar('ZAS', cls.attackRange, 5, 8.5)}</span>
+      `;
+      card.onclick = () => this.selectClass(id);
+      this.classPick.appendChild(card);
+    }
+
+    this.selectClass(this.selectedClass);
+  }
+
+  private selectClass(id: ClassId): void {
+    this.selectedClass = id;
+    const cards = [...this.classPick.querySelectorAll<HTMLElement>('.class-card')];
+    cards.forEach((card, i) => {
+      card.setAttribute('aria-checked', String(CLASS_IDS[i] === id));
+    });
+
+    // Opis kitu zmienia się razem z wyborem — gracz widzi, czym zagra,
+    // zanim wciśnie „Graj", a nie dopiero w trakcie rundy.
+    const cls = getClass(id);
+    setHowto(this.howto.move, cls.move);
+    setHowto(this.howto.trick, cls.trick);
+    setHowto(this.howto.power, cls.power);
+
+    let tagline = this.start.querySelector<HTMLElement>('.class-tagline');
+    if (!tagline) {
+      tagline = document.createElement('p');
+      tagline.className = 'class-tagline';
+      this.classPick.after(tagline);
+    }
+    tagline.textContent = cls.tagline;
   }
 
   hideAll(): void {
@@ -86,6 +173,31 @@ export class Screens {
       };
     }
   }
+}
+
+function setHowto(row: HTMLElement, ability: keyof typeof ABILITY_NAMES): void {
+  const key = row.querySelector<HTMLElement>('.howto-key');
+  const desc = row.querySelector<HTMLElement>('.howto-desc');
+  if (key) key.textContent = `${ABILITY_GLYPHS[ability]} ${ABILITY_NAMES[ability]}`;
+  if (desc) desc.textContent = ABILITY_HINTS[ability] ?? '';
+}
+
+/** Trzysegmentowy słupek — czytelny bez znajomości skali. */
+function bar(label: string, value: number, min: number, max: number): string {
+  const filled = Math.max(1, Math.min(3, Math.round(((value - min) / (max - min)) * 3)));
+  return `${label} ${'▮'.repeat(filled)}${'▯'.repeat(3 - filled)}`;
+}
+
+/** Znacznik klasy — ten sam kształt co sylwetka na arenie. */
+function classMark(id: ClassId): string {
+  const common = 'width="34" height="34" viewBox="0 0 34 34" aria-hidden="true"';
+  if (id === 'kolos') {
+    return `<svg ${common}><polygon points="17,4 29,11 29,23 17,30 5,23 5,11" fill="#ff8a65" stroke="#0b0e15" stroke-width="2"/></svg>`;
+  }
+  if (id === 'widmo') {
+    return `<svg ${common}><polygon points="17,3 27,17 17,31 7,17" fill="#ba68c8" stroke="#0b0e15" stroke-width="2"/></svg>`;
+  }
+  return `<svg ${common}><circle cx="17" cy="17" r="13" fill="#4fc3f7" stroke="#0b0e15" stroke-width="2"/></svg>`;
 }
 
 function stat(label: string, value: string): string {

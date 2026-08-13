@@ -1,22 +1,18 @@
 import {
-  ATTACK_COOLDOWN_TICKS,
-  ATTACK_DAMAGE,
-  ATTACK_RANGE,
-  BURST_COOLDOWN_TICKS,
-  BURST_DAMAGE,
-  BURST_KNOCKBACK,
-  BURST_RADIUS,
-  BURST_WINDUP_TICKS,
   DT,
-  MAX_HP,
   PICKUP_DAMAGE_MUL,
+  PLAYER_RADIUS,
   REGEN_DELAY_TICKS,
   REGEN_PER_SECOND,
   SCORE_PER_KILL,
   STEALTH_BREAK_DELAY_TICKS,
-  STEALTH_COOLDOWN_TICKS,
-  STEALTH_DURATION_TICKS,
 } from './constants.ts';
+import {
+  getClass,
+  MOVE_ABILITY,
+  POWER_ABILITY,
+  TRICK_ABILITY,
+} from './classes.ts';
 import type { InputFrame, PlayerState, World } from './types.ts';
 import { isStealthed } from './world.ts';
 
@@ -38,7 +34,7 @@ export function damageMultiplier(p: PlayerState, tick: number): number {
 export function findAttackTarget(
   world: World,
   attacker: PlayerState,
-  range = ATTACK_RANGE,
+  range = getClass(attacker.classId).attackRange,
 ): PlayerState | null {
   let best: PlayerState | null = null;
   let bestDist = range;
@@ -58,88 +54,279 @@ export function stepAutoAttacks(world: World): void {
   for (const p of world.players) {
     if (!p.alive) continue;
     if (world.tick < p.cdAttack) continue;
-    // W trakcie skoku nie atakujemy — skok to okno na ucieczkę, nie DPS.
+    // W trakcie ruchu ze slotu RUCH nie atakujemy — to jest okno na
+    // przemieszczenie, nie darmowy DPS.
     if (world.tick < p.dashEndTick) continue;
 
+    // W ukryciu auto-atak MILCZY.
+    //
+    // Atak jest automatyczny (wymóg jednej ręki), więc gracz nie może go
+    // powstrzymać. Gdyby strzelał w ukryciu, sam by się zdradzał w chwili,
+    // gdy podchodzi do celu — a zasadzka Widma stawała się nierozgrywalna.
+    // Ukrycie jest teraz stanem decyzji: wychodzisz z niego własnym ciosem,
+    // w wybranym momencie, a nie dlatego, że wróg wszedł w zasięg.
+    if (isStealthed(p, world.tick)) continue;
+
+    const cls = getClass(p.classId);
     const target = findAttackTarget(world, p);
     if (!target) continue;
 
-    p.cdAttack = world.tick + ATTACK_COOLDOWN_TICKS;
+    p.cdAttack = world.tick + cls.attackCooldownTicks;
     p.facing = Math.atan2(target.y - p.y, target.x - p.x);
 
-    // Atak zdradza pozycję: ukrycie kończy się z małym opóźnieniem,
-    // dzięki czemu zasadzka z ukrycia ma sens, ale nie jest darmowa.
-    if (isStealthed(p, world.tick)) {
-      p.stealthEndTick = world.tick + STEALTH_BREAK_DELAY_TICKS;
-    }
-
-    const dmg = ATTACK_DAMAGE * damageMultiplier(p, world.tick);
-    applyDamage(world, target, dmg, p.id);
+    applyDamage(world, target, cls.attackDamage * damageMultiplier(p, world.tick), p.id);
   }
 }
 
-export function tryStartStealth(world: World, p: PlayerState, input: InputFrame): void {
+// --- Slot SZTUCZKA -----------------------------------------------------------
+
+export function tryStartTrick(world: World, p: PlayerState, input: InputFrame): void {
   if (!p.alive || !input.stealth) return;
-  if (world.tick < p.cdStealth) return;
-  if (isStealthed(p, world.tick)) return;
+  if (world.tick < p.cdTrick) return;
 
-  p.stealthEndTick = world.tick + STEALTH_DURATION_TICKS;
-  p.cdStealth = world.tick + STEALTH_COOLDOWN_TICKS;
-  world.events.push({ type: 'stealthIn', player: p.id, x: p.x, y: p.y, tick: world.tick });
+  const trick = getClass(p.classId).trick;
+
+  if (trick === 'cien') {
+    if (isStealthed(p, world.tick)) return;
+    const def = TRICK_ABILITY.cien;
+    p.stealthEndTick = world.tick + def.durationTicks;
+    p.cdTrick = world.tick + def.cooldownTicks;
+    // Wejście w ukrycie uzbraja zasadzkę — pierwszy cios po wyjściu
+    // liczy się podwójnie dla Rozdarcia.
+    p.ambushReady = true;
+    world.events.push({ type: 'stealthIn', player: p.id, x: p.x, y: p.y, tick: world.tick });
+    return;
+  }
+
+  // Tarcza
+  const def = TRICK_ABILITY.tarcza;
+  if (p.shieldHp > 0 && world.tick < p.shieldEndTick) return;
+  p.shieldHp = def.absorb;
+  p.shieldEndTick = world.tick + def.durationTicks;
+  p.cdTrick = world.tick + def.cooldownTicks;
+  world.events.push({ type: 'shieldUp', player: p.id, x: p.x, y: p.y, tick: world.tick });
 }
 
-export function tryStartBurst(world: World, p: PlayerState, input: InputFrame): void {
-  if (!p.alive || !input.burst) return;
-  if (world.tick < p.cdBurst) return;
-  if (p.burstFireTick >= 0) return;
-
-  p.burstFireTick = world.tick + BURST_WINDUP_TICKS;
-  p.cdBurst = world.tick + BURST_COOLDOWN_TICKS;
-}
-
-/** Detonacja fal, których windup już minął. */
-export function stepBursts(world: World): void {
+/** Wygaszenie tarczy po upływie czasu — bez tego trwałaby do rozbicia. */
+export function stepShields(world: World): void {
   for (const p of world.players) {
-    if (p.burstFireTick < 0) continue;
-    if (world.tick < p.burstFireTick) continue;
+    if (p.shieldHp <= 0) continue;
+    if (world.tick < p.shieldEndTick) continue;
+    p.shieldHp = 0;
+  }
+}
 
-    p.burstFireTick = -1;
+// --- Slot MOC ----------------------------------------------------------------
+
+export function tryStartPower(world: World, p: PlayerState, input: InputFrame): void {
+  if (!p.alive || !input.burst) return;
+  if (world.tick < p.cdPower) return;
+  if (p.powerFireTick >= 0 || p.salvoLeft > 0) return;
+
+  const power = getClass(p.classId).power;
+
+  if (power === 'salwa') {
+    const def = POWER_ABILITY.salwa;
+    const target = findAttackTarget(world, p, def.range);
+    // Salwa bez celu nie odpala — nie marnujemy odnowienia na powietrze.
+    if (!target) return;
+    p.salvoLeft = def.shots;
+    p.salvoNextTick = world.tick;
+    p.salvoTargetId = target.id;
+    p.cdPower = world.tick + def.cooldownTicks;
+    return;
+  }
+
+  const windup =
+    power === 'fala' ? POWER_ABILITY.fala.windupTicks : POWER_ABILITY.rozdarcie.windupTicks;
+  const cooldown =
+    power === 'fala' ? POWER_ABILITY.fala.cooldownTicks : POWER_ABILITY.rozdarcie.cooldownTicks;
+
+  p.powerFireTick = world.tick + windup;
+  p.cdPower = world.tick + cooldown;
+}
+
+/** Detonacja mocy, których windup już minął, oraz kolejne strzały Salwy. */
+export function stepPowers(world: World): void {
+  for (const p of world.players) {
+    stepSalvo(world, p);
+
+    if (p.powerFireTick < 0) continue;
+    if (world.tick < p.powerFireTick) continue;
+
+    p.powerFireTick = -1;
     if (!p.alive) continue;
 
-    world.events.push({ type: 'burst', player: p.id, x: p.x, y: p.y, tick: world.tick });
+    const power = getClass(p.classId).power;
+    if (power === 'fala') fireBurst(world, p);
+    else if (power === 'rozdarcie') fireRend(world, p);
+  }
+}
 
-    // Fala wybija z ukrycia — to jest jej druga rola poza obrażeniami.
-    if (isStealthed(p, world.tick)) {
-      p.stealthEndTick = world.tick;
-      world.events.push({ type: 'stealthOut', player: p.id, x: p.x, y: p.y, tick: world.tick });
+function stepSalvo(world: World, p: PlayerState): void {
+  if (p.salvoLeft <= 0) return;
+  if (!p.alive) {
+    p.salvoLeft = 0;
+    return;
+  }
+  if (world.tick < p.salvoNextTick) return;
+
+  const def = POWER_ABILITY.salwa;
+  const target = world.players[p.salvoTargetId];
+
+  // Cel zginął, uciekł albo zniknął w ukryciu — salwa się urywa.
+  // To jest cena za zasięg: Salwa nagradza wybór momentu.
+  if (
+    !target ||
+    !target.alive ||
+    isStealthed(target, world.tick) ||
+    Math.hypot(target.x - p.x, target.y - p.y) > def.range * 1.25
+  ) {
+    p.salvoLeft = 0;
+    return;
+  }
+
+  p.salvoLeft -= 1;
+  p.salvoNextTick = world.tick + def.intervalTicks;
+  p.facing = Math.atan2(target.y - p.y, target.x - p.x);
+
+  // Salwa wychodzi z ukrycia — z małym opóźnieniem, żeby pierwszy strzał
+  // wciąż liczył się jako zasadzka.
+  if (isStealthed(p, world.tick)) {
+    p.stealthEndTick = world.tick + STEALTH_BREAK_DELAY_TICKS;
+  }
+
+  world.events.push({
+    type: 'salvo',
+    player: p.id,
+    x: p.x,
+    y: p.y,
+    target: target.id,
+    tick: world.tick,
+  });
+  applyDamage(world, target, def.damagePerShot * damageMultiplier(p, world.tick), p.id);
+}
+
+function fireBurst(world: World, p: PlayerState): void {
+  const def = POWER_ABILITY.fala;
+  world.events.push({
+    type: 'burst',
+    player: p.id,
+    x: p.x,
+    y: p.y,
+    radius: def.radius,
+    tick: world.tick,
+  });
+
+  // Fala wybija z ukrycia — to jest jej druga rola poza obrażeniami.
+  breakStealth(world, p);
+
+  const dmg = def.damage * damageMultiplier(p, world.tick);
+  for (const other of world.players) {
+    if (other.id === p.id || !other.alive) continue;
+    const dx = other.x - p.x;
+    const dy = other.y - p.y;
+    const d = Math.hypot(dx, dy);
+    if (d > def.radius) continue;
+
+    // Fala trafia także ukrytych — nie musisz ich widzieć, żeby ich zdmuchnąć.
+    breakStealth(world, other);
+
+    // Obrażenia maleją z odległością — środek fali boli, krawędź odpycha.
+    const falloff = 1 - (d / def.radius) * 0.55;
+    applyDamage(world, other, dmg * falloff, p.id);
+
+    if (d > 1e-4) {
+      const push = def.knockback * (1 - d / def.radius);
+      other.vx += (dx / d) * push;
+      other.vy += (dy / d) * push;
+    }
+  }
+}
+
+/**
+ * Rozdarcie — stożek przed postacią.
+ *
+ * Trafia także ukrytych, ale nie ujawnia ich celowaniem: to cios na oślep
+ * w wybranym kierunku, a nie namierzanie.
+ */
+function fireRend(world: World, p: PlayerState): void {
+  const def = POWER_ABILITY.rozdarcie;
+  world.events.push({
+    type: 'rend',
+    player: p.id,
+    x: p.x,
+    y: p.y,
+    facing: p.facing,
+    tick: world.tick,
+  });
+
+  const ambush = p.ambushReady && isStealthed(p, world.tick);
+  breakStealth(world, p);
+
+  const mul = damageMultiplier(p, world.tick) * (ambush ? def.ambushMultiplier : 1);
+  if (ambush) p.ambushReady = false;
+
+  for (const other of world.players) {
+    if (other.id === p.id || !other.alive) continue;
+    const dx = other.x - p.x;
+    const dy = other.y - p.y;
+    const d = Math.hypot(dx, dy);
+    if (d > def.range) continue;
+
+    // Postać stojąca w kontakcie zawsze jest w stożku — inaczej Rozdarcie
+    // gubiłoby cele przyklejone do pleców.
+    if (d > PLAYER_RADIUS * 2) {
+      const angle = Math.atan2(dy, dx);
+      if (Math.abs(angleDiff(angle, p.facing)) > def.halfAngle) continue;
     }
 
-    const dmg = BURST_DAMAGE * damageMultiplier(p, world.tick);
+    breakStealth(world, other);
+    applyDamage(world, other, def.damage * mul, p.id);
+  }
+}
+
+/** Obrażenia od Szarży — zadawane każdemu mijanemu wrogowi raz na szarżę. */
+export function stepChargeContact(world: World): void {
+  for (const p of world.players) {
+    if (!p.alive || world.tick >= p.dashEndTick) continue;
+    const move = MOVE_ABILITY[getClass(p.classId).move];
+    if (move.damage <= 0) continue;
+
     for (const other of world.players) {
       if (other.id === p.id || !other.alive) continue;
+      if (p.dashHits.includes(other.id)) continue;
       const dx = other.x - p.x;
       const dy = other.y - p.y;
       const d = Math.hypot(dx, dy);
-      if (d > BURST_RADIUS) continue;
+      if (d > PLAYER_RADIUS * 2.6) continue;
 
-      // Fala trafia także ukrytych — nie musisz ich widzieć, żeby ich zdmuchnąć.
-      if (isStealthed(other, world.tick)) {
-        other.stealthEndTick = world.tick;
-        world.events.push({ type: 'stealthOut', player: other.id, x: other.x, y: other.y, tick: world.tick });
-      }
+      p.dashHits.push(other.id);
+      breakStealth(world, other);
+      applyDamage(world, other, move.damage * damageMultiplier(p, world.tick), p.id);
 
-      // Obrażenia maleją z odległością — środek fali boli, krawędź odpycha.
-      const falloff = 1 - (d / BURST_RADIUS) * 0.55;
-      applyDamage(world, other, dmg * falloff, p.id);
-
-      if (d > 1e-4) {
-        const push = BURST_KNOCKBACK * (1 - d / BURST_RADIUS);
-        other.vx += (dx / d) * push;
-        other.vy += (dy / d) * push;
+      if (d > 1e-4 && move.knockback > 0) {
+        other.vx += (dx / d) * move.knockback;
+        other.vy += (dy / d) * move.knockback;
       }
     }
   }
 }
+
+function breakStealth(world: World, p: PlayerState): void {
+  if (!isStealthed(p, world.tick)) return;
+  p.stealthEndTick = world.tick;
+  world.events.push({ type: 'stealthOut', player: p.id, x: p.x, y: p.y, tick: world.tick });
+}
+
+function angleDiff(a: number, b: number): number {
+  let d = (a - b) % (Math.PI * 2);
+  if (d > Math.PI) d -= Math.PI * 2;
+  if (d < -Math.PI) d += Math.PI * 2;
+  return d;
+}
+
+// --- Obrażenia, regeneracja, śmierć -----------------------------------------
 
 /**
  * Regeneracja poza walką. Licznik resetuje KAŻDE otrzymane obrażenie,
@@ -147,9 +334,9 @@ export function stepBursts(world: World): void {
  */
 export function stepRegen(world: World): void {
   for (const p of world.players) {
-    if (!p.alive || p.hp >= MAX_HP) continue;
+    if (!p.alive || p.hp >= p.maxHp) continue;
     if (p.lastHitTick >= 0 && world.tick - p.lastHitTick < REGEN_DELAY_TICKS) continue;
-    p.hp = Math.min(MAX_HP, p.hp + REGEN_PER_SECOND * DT);
+    p.hp = Math.min(p.maxHp, p.hp + REGEN_PER_SECOND * DT);
   }
 }
 
@@ -161,20 +348,41 @@ export function applyDamage(
 ): void {
   if (!target.alive || amount <= 0) return;
 
-  const dealt = Math.min(amount, target.hp);
+  let remaining = amount;
+  let absorbed = 0;
+
+  // Tarcza pochłania pierwsza. Liczy się do „zadanych obrażeń" napastnika,
+  // bo z jego perspektywy cios wylądował — inaczej statystyki kłamią.
+  if (target.shieldHp > 0 && world.tick < target.shieldEndTick) {
+    absorbed = Math.min(target.shieldHp, remaining);
+    target.shieldHp -= absorbed;
+    remaining -= absorbed;
+    if (target.shieldHp <= 0) {
+      world.events.push({
+        type: 'shieldBreak',
+        player: target.id,
+        x: target.x,
+        y: target.y,
+        tick: world.tick,
+      });
+    }
+  }
+
+  const dealt = Math.min(remaining, target.hp);
+  const landed = absorbed + dealt;
   target.hp -= dealt;
   target.lastHitBy = sourceId;
   target.lastHitTick = world.tick;
 
   if (sourceId >= 0) {
     const src = world.players[sourceId];
-    if (src) src.damageDealt += dealt;
+    if (src) src.damageDealt += landed;
   }
 
   world.events.push({
     type: 'damage',
     target: target.id,
-    amount: dealt,
+    amount: landed,
     source: sourceId,
     x: target.x,
     y: target.y,
@@ -194,7 +402,9 @@ export function killPlayer(world: World, victim: PlayerState, killerId: number):
   victim.vy = 0;
   victim.stealthEndTick = -1;
   victim.dashEndTick = -1;
-  victim.burstFireTick = -1;
+  victim.powerFireTick = -1;
+  victim.salvoLeft = 0;
+  victim.shieldHp = 0;
 
   const killer = killerId >= 0 && killerId !== victim.id ? world.players[killerId] : undefined;
   if (killer) {

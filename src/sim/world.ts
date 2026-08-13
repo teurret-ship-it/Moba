@@ -1,11 +1,11 @@
 import {
   ARENA_RADIUS,
-  MAX_HP,
   PICKUP_SPAWN_INTERVAL_TICKS,
   SUPPLY_EVENT_INTERVAL_TICKS,
   WARMUP_TICKS,
   ZONE_START_RADIUS,
 } from './constants.ts';
+import { getClass, CLASS_IDS, type ClassId } from './classes.ts';
 import { Rng } from './rng.ts';
 import type { PlayerState, World } from './types.ts';
 
@@ -22,6 +22,8 @@ export interface CreateWorldOptions {
   localName?: string;
   /** Ilu graczy w lobby to ludzie. Reszta to fill botami (sekcja 7). */
   humanCount?: number;
+  /** Klasa gracza lokalnego. Boty losują własne. */
+  localClass?: ClassId;
 }
 
 export function createWorld(opts: CreateWorldOptions): World {
@@ -48,12 +50,19 @@ export function createWorld(opts: CreateWorldOptions): World {
     }
     usedNames.add(name);
 
+    // Boty losują klasę, żeby lobby nie było jednorodne. Gracz wybiera
+    // swoją na ekranie startowym.
+    const classId: ClassId = isBot
+      ? rng.pick(CLASS_IDS)
+      : (opts.localClass ?? 'lowca');
+
     players.push(
       createPlayer({
         id: slot,
         slot,
         name,
         isBot,
+        classId,
         x: Math.cos(angle) * spawnRadius,
         y: Math.sin(angle) * spawnRadius,
         facing: angle + Math.PI,
@@ -92,6 +101,7 @@ interface CreatePlayerArgs {
   slot: number;
   name: string;
   isBot: boolean;
+  classId: ClassId;
   x: number;
   y: number;
   facing: number;
@@ -99,12 +109,14 @@ interface CreatePlayerArgs {
 }
 
 export function createPlayer(a: CreatePlayerArgs): PlayerState {
+  const cls = getClass(a.classId);
   return {
     id: a.id,
     slot: a.slot,
     name: a.name,
     isBot: a.isBot,
     colorIndex: a.colorIndex,
+    classId: a.classId,
 
     x: a.x,
     y: a.y,
@@ -112,7 +124,8 @@ export function createPlayer(a: CreatePlayerArgs): PlayerState {
     vy: 0,
     facing: a.facing,
 
-    hp: MAX_HP,
+    hp: cls.maxHp,
+    maxHp: cls.maxHp,
     alive: true,
     deathTick: -1,
     lastHitBy: -1,
@@ -121,11 +134,21 @@ export function createPlayer(a: CreatePlayerArgs): PlayerState {
     dashEndTick: -1,
     dashDirX: 0,
     dashDirY: 0,
+    dashHits: [],
+
     stealthEndTick: -1,
-    burstFireTick: -1,
-    cdDash: 0,
-    cdStealth: 0,
-    cdBurst: 0,
+    shieldHp: 0,
+    shieldEndTick: -1,
+
+    powerFireTick: -1,
+    salvoLeft: 0,
+    salvoNextTick: -1,
+    salvoTargetId: -1,
+    ambushReady: false,
+
+    cdMove: 0,
+    cdTrick: 0,
+    cdPower: 0,
     cdAttack: 0,
 
     speedBuffEndTick: -1,
@@ -157,5 +180,5 @@ export function isStealthed(p: PlayerState, tick: number): boolean {
 /** Głęboka kopia stanu gracza — używana przez predykcję klienta. */
 export function clonePlayer(p: PlayerState): PlayerState {
   const { ai: _ai, ...rest } = p;
-  return { ...rest };
+  return { ...rest, dashHits: [...p.dashHits] };
 }

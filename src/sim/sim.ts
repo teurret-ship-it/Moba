@@ -6,9 +6,17 @@ import {
   TICK_HZ,
   WARMUP_TICKS,
 } from './constants.ts';
-import { stepAutoAttacks, stepBursts, stepRegen, tryStartBurst, tryStartStealth } from './combat.ts';
+import {
+  stepAutoAttacks,
+  stepChargeContact,
+  stepPowers,
+  stepRegen,
+  stepShields,
+  tryStartPower,
+  tryStartTrick,
+} from './combat.ts';
 import { computeBotInput, createBrain } from './bots.ts';
-import { applyMovement, resolveOverlaps, tryStartDash } from './movement.ts';
+import { applyMovement, resolveOverlaps, tryStartMove } from './movement.ts';
 import { stepPickups } from './pickups.ts';
 import { Rng } from './rng.ts';
 import type { InputFrame, MatchResult, PlayerState, World } from './types.ts';
@@ -99,11 +107,11 @@ export class Simulation {
     for (const p of w.players) {
       const input = frames.get(p.id);
       if (!input) continue;
-      if (tryStartDash(p, input, w.tick)) {
+      if (tryStartMove(p, input, w.tick)) {
         w.events.push({ type: 'dash', player: p.id, x: p.x, y: p.y, tick: w.tick });
       }
-      tryStartStealth(w, p, input);
-      tryStartBurst(w, p, input);
+      tryStartTrick(w, p, input);
+      tryStartPower(w, p, input);
     }
 
     // 3. Ruch.
@@ -111,7 +119,7 @@ export class Simulation {
       const input = frames.get(p.id);
       applyMovement(p, input ?? emptyInput(), w.tick);
     }
-    resolveOverlaps(w.players);
+    resolveOverlaps(w.players, w.tick);
 
     // 4. Koniec ukrycia — zdarzenie na krawędzi, do efektu wizualnego.
     for (const p of w.players) {
@@ -120,10 +128,13 @@ export class Simulation {
       }
     }
 
-    // 5. Walka. Fale detonują przed auto-atakami, żeby knockback
-    //    wpływał na to, kto jest w zasięgu w tym ticku.
-    stepBursts(w);
+    // 5. Walka. Moce detonują przed auto-atakami, żeby odrzut wpływał
+    //    na to, kto jest w zasięgu w tym ticku. Kontakt Szarży liczymy
+    //    jako pierwszy, bo dzieje się „po drodze", w trakcie ruchu.
+    stepChargeContact(w);
+    stepPowers(w);
     stepAutoAttacks(w);
+    stepShields(w);
 
     // 6. Dropy i zdarzenia mapy.
     stepPickups(w, this.rng);

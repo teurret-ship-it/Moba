@@ -1,10 +1,5 @@
-import {
-  ATTACK_RANGE,
-  BURST_RADIUS,
-  MAX_HP,
-  TICK_HZ,
-  WARMUP_TICKS,
-} from './constants.ts';
+import { TICK_HZ, WARMUP_TICKS } from './constants.ts';
+import { getClass, POWER_ABILITY } from './classes.ts';
 import type { Rng } from './rng.ts';
 import type { BotBrain, InputFrame, PlayerState, World } from './types.ts';
 import { isStealthed } from './world.ts';
@@ -51,7 +46,7 @@ export function createBrain(rng: Rng, tick: number): BotBrain {
  * przez pierwsze 60 s, a bot szarżujący od pierwszej sekundy nim nie jest.
  */
 const AGGRO_START_TICKS = WARMUP_TICKS + 50 * TICK_HZ;
-const AGGRO_FULL_TICKS = WARMUP_TICKS + 140 * TICK_HZ;
+const AGGRO_FULL_TICKS = WARMUP_TICKS + 155 * TICK_HZ;
 const AGGRO_MIN = 0.4;
 
 function aggression(world: World): number {
@@ -99,7 +94,7 @@ export function computeBotInput(world: World, bot: PlayerState, rng: Rng): Input
       const dx = target.x - bot.x;
       const dy = target.y - bot.y;
       const d = Math.hypot(dx, dy) || 1;
-      const desired = ATTACK_RANGE * 0.75;
+      const desired = getClass(bot.classId).attackRange * 0.75;
       goalX = target.x - (dx / d) * desired;
       goalY = target.y - (dy / d) * desired;
     } else {
@@ -144,7 +139,7 @@ export function computeBotInput(world: World, bot: PlayerState, rng: Rng): Input
 }
 
 function decide(world: World, bot: PlayerState, brain: BotBrain, rng: Rng): void {
-  const hpFrac = bot.hp / MAX_HP;
+  const hpFrac = bot.hp / bot.maxHp;
   const distToCenter = Math.hypot(bot.x - world.zone.x, bot.y - world.zone.y);
   const outside = distToCenter > world.zone.radius - 2;
 
@@ -250,7 +245,7 @@ function findThreat(
 
     // Bliżej = lepiej, ranny = lepiej. Wagi zależne od skilla:
     // dobry bot dobija rannych, słaby idzie po najbliższym.
-    const woundedBonus = (1 - other.hp / MAX_HP) * 30 * brain.skill;
+    const woundedBonus = (1 - other.hp / other.maxHp) * 30 * brain.skill;
     const score = -d + woundedBonus + (other.id === brain.targetId ? 6 : 0);
     if (score > bestScore) {
       bestScore = score;
@@ -287,37 +282,92 @@ function chooseAbilities(
   input: InputFrame,
   rng: Rng,
 ): void {
-  const hpFrac = bot.hp / MAX_HP;
+  const cls = getClass(bot.classId);
+  const hpFrac = bot.hp / bot.maxHp;
   const distToTarget = target && target.alive
     ? Math.hypot(target.x - bot.x, target.y - bot.y)
     : Infinity;
 
-  // Fala: gdy cel jest w zasięgu wybuchu. Słabsze boty pudłują z timingiem.
-  if (world.tick >= bot.cdBurst && distToTarget < BURST_RADIUS * 0.85) {
-    if (rng.bool(0.25 + 0.55 * brain.skill)) {
+  // --- Slot MOC ---
+  // Każda moc ma inny zasięg i inny moment, w którym warto ją wydać.
+  if (world.tick >= bot.cdPower) {
+    const def = POWER_ABILITY[cls.power];
+    let wants = false;
+
+    if (cls.power === 'fala') {
+      wants = distToTarget < POWER_ABILITY.fala.radius * 0.8;
+    } else if (cls.power === 'salwa') {
+      // Salwa opłaca się z dystansu — z bliska bot i tak bije automatem.
+      wants = distToTarget < POWER_ABILITY.salwa.range * 0.95;
+    } else {
+      // Rozdarcie: z bliska, a z ukrycia zawsze — to jest cała zasadzka Widma.
+      // Uzbrojona zasadzka jest warta podwójnych obrażeń, więc bot nie
+      // marnuje jej na cel poza stożkiem.
+      const inRange = distToTarget < POWER_ABILITY.rozdarcie.range * 0.8;
+      const armed = bot.ambushReady && isStealthed(bot, world.tick);
+      wants = inRange && (armed || rng.bool(0.6));
+    }
+    void def;
+
+    if (wants && rng.bool(0.25 + 0.55 * brain.skill)) {
       input.burst = true;
       return;
     }
   }
 
-  // Skok: dogonić uciekającego albo zerwać dystans przy ucieczce.
-  if (world.tick >= bot.cdDash) {
-    const wantsGap = brain.mood === 'flee' || (hpFrac < 0.3 && distToTarget < 8);
-    const wantsClose = brain.mood === 'hunt' && distToTarget > ATTACK_RANGE * 1.4 && distToTarget < 20;
+  // --- Slot RUCH ---
+  if (world.tick >= bot.cdMove) {
     const needsZone = brain.mood === 'rezone';
-    if ((wantsGap || wantsClose || needsZone) && rng.bool(0.2 + 0.5 * brain.skill)) {
+    let wants = needsZone;
+
+    if (cls.move === 'szarza') {
+      // Kolos szarżuje DO walki, nie z niej. Ucieczka szarżą to marnotrawstwo,
+      // bo jest wolniejsza od Skoku i ciągnie go przez wrogów.
+      wants ||= brain.mood === 'hunt' && distToTarget > cls.attackRange && distToTarget < 22;
+    } else {
+      // Skok i Mgnienie służą obu kierunkom.
+      const wantsGap = brain.mood === 'flee' || (hpFrac < 0.3 && distToTarget < 8);
+      const wantsClose =
+        brain.mood === 'hunt' && distToTarget > cls.attackRange * 1.4 && distToTarget < 20;
+      wants ||= wantsGap || wantsClose;
+    }
+
+    if (wants && rng.bool(0.2 + 0.5 * brain.skill)) {
       input.dash = true;
       return;
     }
   }
 
-  // Cień: ucieczka albo zasadzka. Słabe boty używają go losowo,
-  // co wygląda dokładnie jak marnowanie umiejętności przez człowieka.
-  if (world.tick >= bot.cdStealth) {
+  // --- Slot SZTUCZKA ---
+  if (world.tick >= bot.cdTrick) {
+    if (cls.trick === 'tarcza') {
+      // Tarcza ma sens tylko wtedy, gdy coś w nią uderzy. Bot stawia ją,
+      // gdy jest w kontakcie i obrywa — nie prewencyjnie na pustej mapie.
+      const underFire = world.tick - bot.lastHitTick < 1.5 * TICK_HZ;
+      const engaged = distToTarget < cls.attackRange * 1.6;
+      if ((underFire || (engaged && hpFrac < 0.7)) && rng.bool(0.3 + 0.6 * brain.skill)) {
+        input.stealth = true;
+      }
+      return;
+    }
+
+    // Cień: ucieczka albo zasadzka. Słabe boty używają go losowo,
+    // co wygląda dokładnie jak marnowanie umiejętności przez człowieka.
     const escaping = brain.mood === 'flee' && hpFrac < 0.4;
-    const ambushing = brain.mood === 'hunt' && distToTarget > ATTACK_RANGE * 1.5 && distToTarget < 18;
+    const ambushing =
+      brain.mood === 'hunt' && distToTarget > cls.attackRange * 1.5 && distToTarget < 18;
+    // Klasa, której moc premiuje zasadzkę, wchodzi w ukrycie ZANIM podejdzie.
+    // Bez tego bot-Widmo używa Cienia wyłącznie do ucieczki i nigdy nie gra
+    // tym, co stanowi całą jego ekonomię.
+    //
+    // Warunek konieczny: moc musi być gotowa. W ukryciu auto-atak milczy,
+    // więc wejście w Cień bez Rozdarcia na podorędziu to dobrowolne
+    // 3,5 sekundy zerowych obrażeń.
+    const assassin = cls.power === 'rozdarcie';
+    const powerReady = world.tick >= bot.cdPower;
+    const ambushChance = assassin && powerReady ? 0.55 + 0.4 * brain.skill : 0.3 * brain.skill;
     const wasteful = rng.bool(0.02 * (1 - brain.skill));
-    if (escaping || (ambushing && rng.bool(0.3 * brain.skill)) || wasteful) {
+    if (escaping || (ambushing && rng.bool(ambushChance)) || wasteful) {
       input.stealth = true;
     }
   }

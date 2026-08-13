@@ -1,10 +1,12 @@
 import * as THREE from 'three';
-import { MAX_HP, PLAYER_RADIUS } from '../sim/constants.ts';
+import { PLAYER_RADIUS } from '../sim/constants.ts';
 import type { RenderState } from '../client/interpolation.ts';
 import { createArena, type ArenaObjects } from './arena.ts';
 import { FxSystem } from './fx.ts';
+import type { ClassId } from '../sim/classes.ts';
 import {
   getCharacterTexture,
+  getGlowTexture,
   getFacingTexture,
   getPickupTexture,
   getSelfRingTexture,
@@ -25,6 +27,13 @@ import {
  * wyłącznie kosmetyczna — symulacja jej nie zna.
  */
 
+/** Rozmiar sylwetki na klasę — czytelny sygnał „z kim mam do czynienia". */
+const CLASS_SIZE: Record<ClassId, number> = {
+  lowca: 2.5,
+  kolos: 3.3,
+  widmo: 2.2,
+};
+
 const CAMERA_HEIGHT = 33;
 const CAMERA_DISTANCE = 25;
 /** Wygładzanie kamery: 1/s. Wyżej = sztywniej, niżej = bujanie. */
@@ -36,6 +45,7 @@ interface PlayerVisual {
   shadow: THREE.Mesh;
   facing: THREE.Mesh;
   selfRing: THREE.Mesh;
+  shield: THREE.Sprite;
   hpBg: THREE.Sprite;
   hpFill: THREE.Sprite;
   /** Wygaszanie po zniknięciu z widoku (ukrycie / wyjście z AoI). */
@@ -127,7 +137,7 @@ export class ArenaRenderer {
 
     for (const p of state.players) {
       seen.add(p.id);
-      const visual = this.getPlayerVisual(p.id, p.colorIndex);
+      const visual = this.getPlayerVisual(p.id, p.colorIndex, p.classId);
 
       // Własna postać jest rysowana z predykcji, nie z interpolacji —
       // inaczej reaguje z opóźnieniem 100 ms i na telefonie to widać.
@@ -156,7 +166,15 @@ export class ArenaRenderer {
       visual.facing.rotation.z = -facing;
       visual.selfRing.visible = useSelf;
 
-      const hpFrac = Math.max(0, Math.min(1, p.hp / MAX_HP));
+      visual.shield.visible = p.shieldHp > 0;
+      if (visual.shield.visible) {
+        const pulse = 1 + Math.sin(this.elapsed * 8) * 0.05;
+        visual.shield.scale.setScalar(pulse);
+        (visual.shield.material as THREE.SpriteMaterial).opacity =
+          0.35 + 0.4 * Math.min(1, p.shieldHp / 55);
+      }
+
+      const hpFrac = Math.max(0, Math.min(1, p.hp / p.maxHp));
       visual.hpBg.visible = !useSelf && p.alive;
       visual.hpFill.visible = !useSelf && p.alive;
       if (visual.hpFill.visible) {
@@ -170,9 +188,12 @@ export class ArenaRenderer {
 
       // Skok: lekkie „przysiadnięcie" sprite'a, żeby ruch był czytelny
       // także wtedy, gdy postać jest za krawędzią ekranu.
+      // Kolos jest wyraźnie większy, Widmo mniejsze — sylwetka musi
+      // czytać klasę z odległości, zanim zobaczysz pasek HP.
+      const size = CLASS_SIZE[p.classId] ?? 2.5;
       const squash = p.dashing ? 0.82 : 1;
-      visual.body.scale.set(2.5 * squash, 2.5 / squash, 1);
-      visual.body.position.y = 1.25 / squash;
+      visual.body.scale.set(size * squash, size / squash, 1);
+      visual.body.position.y = (size / 2) / squash;
 
       const bob = Math.sin(this.elapsed * 6 + p.id) * 0.05;
       visual.body.position.y += bob;
@@ -188,11 +209,12 @@ export class ArenaRenderer {
       visual.hpBg.visible = false;
       visual.hpFill.visible = false;
       visual.selfRing.visible = false;
+      visual.shield.visible = false;
       if (visual.fade <= 0.001) visual.root.visible = false;
     }
   }
 
-  private getPlayerVisual(id: number, colorIndex: number): PlayerVisual {
+  private getPlayerVisual(id: number, colorIndex: number, classId: ClassId): PlayerVisual {
     const existing = this.players.get(id);
     if (existing) {
       (existing.shadow.material as THREE.MeshBasicMaterial).opacity = 0.6 * existing.fade;
@@ -203,7 +225,7 @@ export class ArenaRenderer {
 
     const body = new THREE.Sprite(
       new THREE.SpriteMaterial({
-        map: getCharacterTexture(colorIndex),
+        map: getCharacterTexture(colorIndex, classId),
         transparent: true,
         depthWrite: false,
       }),
@@ -252,6 +274,22 @@ export class ArenaRenderer {
     selfRing.visible = false;
     root.add(selfRing);
 
+    // Tarcza Kolosa — bańka wokół sylwetki, widoczna dla wszystkich,
+    // bo przeciwnik musi wiedzieć, że teraz nie warto go bić.
+    const shield = new THREE.Sprite(
+      new THREE.SpriteMaterial({
+        map: getGlowTexture(),
+        color: 0x8fd4ff,
+        transparent: true,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+      }),
+    );
+    shield.scale.setScalar(4.2);
+    shield.position.y = 1.3;
+    shield.visible = false;
+    root.add(shield);
+
     const hpBg = new THREE.Sprite(
       new THREE.SpriteMaterial({ color: 0x11141c, transparent: true, opacity: 0.75, depthWrite: false }),
     );
@@ -273,6 +311,7 @@ export class ArenaRenderer {
       shadow,
       facing,
       selfRing,
+      shield,
       hpBg,
       hpFill,
       fade: 0,
@@ -356,6 +395,7 @@ export class ArenaRenderer {
       (visual.facing.material as THREE.Material).dispose();
       visual.selfRing.geometry.dispose();
       (visual.selfRing.material as THREE.Material).dispose();
+      (visual.shield.material as THREE.Material).dispose();
       (visual.hpBg.material as THREE.Material).dispose();
       (visual.hpFill.material as THREE.Material).dispose();
     }

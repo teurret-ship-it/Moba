@@ -44,6 +44,7 @@
       <div id="hud-bottom">
         <div id="hud-hp">
           <div id="hud-hp-fill" data-level="ok"></div>
+          <div id="hud-hp-shield" hidden></div>
           <span id="hud-hp-text">100</span>
         </div>
       </div>
@@ -77,6 +78,8 @@
           <h1 class="screen-title">ARENA</h1>
           <p class="screen-sub">Zostań ostatni. Cztery minuty.</p>
 
+          <div class="class-pick" id="class-pick" role="radiogroup" aria-label="Wybór postaci"></div>
+
           <div class="howto">
             <div class="howto-row">
               <span class="howto-key">lewa połowa ekranu</span>
@@ -86,17 +89,17 @@
               <span class="howto-key">atak</span>
               <span class="howto-desc">automatyczny, gdy wróg jest w zasięgu</span>
             </div>
-            <div class="howto-row">
-              <span class="howto-key">➤ Skok</span>
-              <span class="howto-desc">wyskocz z opresji albo dogoń</span>
+            <div class="howto-row" id="howto-move">
+              <span class="howto-key"></span>
+              <span class="howto-desc"></span>
             </div>
-            <div class="howto-row">
-              <span class="howto-key">◍ Cień</span>
-              <span class="howto-desc">znikasz — dosłownie, nikt cię nie widzi</span>
+            <div class="howto-row" id="howto-trick">
+              <span class="howto-key"></span>
+              <span class="howto-desc"></span>
             </div>
-            <div class="howto-row">
-              <span class="howto-key">✸ Fala</span>
-              <span class="howto-desc">wybuch dookoła, odrzuca i wybija z ukrycia</span>
+            <div class="howto-row" id="howto-power">
+              <span class="howto-key"></span>
+              <span class="howto-desc"></span>
             </div>
           </div>
 

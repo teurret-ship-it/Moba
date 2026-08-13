@@ -1,4 +1,5 @@
 import { AOI_RADIUS, SNAPSHOT_HZ, TICK_HZ } from './constants.ts';
+import type { ClassId } from './classes.ts';
 import type {
   MatchPhase,
   Pickup,
@@ -36,8 +37,13 @@ export interface PlayerView {
   hp: number;
   alive: boolean;
   colorIndex: number;
+  classId: ClassId;
   name: string;
   isBot: boolean;
+  /** Z klasy — pasek HP musi wiedzieć, że Kolos ma 150, a Widmo 82. */
+  maxHp: number;
+  /** Ile jeszcze pochłonie tarcza (0 = brak). Widoczne dla wszystkich. */
+  shieldHp: number;
   dashing: boolean;
   /** Ustawiane tylko dla odbiorcy snapshotu — nikt inny nie wie o cudzym ukryciu. */
   stealthed: boolean;
@@ -65,6 +71,9 @@ export interface Snapshot {
 
 export interface SelfView {
   id: PlayerId;
+  classId: ClassId;
+  maxHp: number;
+  shieldHp: number;
   x: number;
   y: number;
   vx: number;
@@ -78,9 +87,9 @@ export interface SelfView {
   stealthEndTick: number;
   speedBuffEndTick: number;
   damageBuffEndTick: number;
-  cdDash: number;
-  cdStealth: number;
-  cdBurst: number;
+  cdMove: number;
+  cdTrick: number;
+  cdPower: number;
   kills: number;
   score: number;
 }
@@ -151,19 +160,25 @@ function toView(p: PlayerState, tick: number, isSelf: boolean): PlayerView {
     hp: p.hp,
     alive: p.alive,
     colorIndex: p.colorIndex,
+    classId: p.classId,
     name: p.name,
     isBot: p.isBot,
+    maxHp: p.maxHp,
+    shieldHp: tick < p.shieldEndTick ? p.shieldHp : 0,
     dashing: tick < p.dashEndTick,
     stealthed: isSelf && tick < p.stealthEndTick,
     speedBuffed: tick < p.speedBuffEndTick,
     damageBuffed: tick < p.damageBuffEndTick,
-    bursting: p.burstFireTick >= 0,
+    bursting: p.powerFireTick >= 0 || p.salvoLeft > 0,
   };
 }
 
 function toSelfView(p: PlayerState): SelfView {
   return {
     id: p.id,
+    classId: p.classId,
+    maxHp: p.maxHp,
+    shieldHp: p.shieldEndTick > 0 ? p.shieldHp : 0,
     x: p.x,
     y: p.y,
     vx: p.vx,
@@ -177,9 +192,9 @@ function toSelfView(p: PlayerState): SelfView {
     stealthEndTick: p.stealthEndTick,
     speedBuffEndTick: p.speedBuffEndTick,
     damageBuffEndTick: p.damageBuffEndTick,
-    cdDash: p.cdDash,
-    cdStealth: p.cdStealth,
-    cdBurst: p.cdBurst,
+    cdMove: p.cdMove,
+    cdTrick: p.cdTrick,
+    cdPower: p.cdPower,
     kills: p.kills,
     score: p.score,
   };
@@ -223,6 +238,10 @@ function filterEvents(
       case 'stealthOut':
       case 'dash':
       case 'burst':
+      case 'rend':
+      case 'salvo':
+      case 'shieldUp':
+      case 'shieldBreak':
         if (e.player === viewerId || withinAoi(e.x, e.y, eyeX, eyeY, aoi)) out.push(e);
         break;
     }

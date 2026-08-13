@@ -1,16 +1,13 @@
 import {
   ACCEL,
   ARENA_RADIUS,
-  BASE_SPEED,
-  DASH_COOLDOWN_TICKS,
-  DASH_DURATION_TICKS,
-  DASH_SPEED,
   DT,
   FRICTION,
   PICKUP_SPEED_MUL,
   PLAYER_RADIUS,
   STEALTH_SPEED_MUL,
 } from './constants.ts';
+import { getClass, MOVE_ABILITY } from './classes.ts';
 import type { InputFrame, PlayerState } from './types.ts';
 
 /**
@@ -21,16 +18,20 @@ import type { InputFrame, PlayerState } from './types.ts';
  *  2. w predykcji po stronie klienta (`client/prediction.ts`).
  *
  * Jeśli te dwie ścieżki kiedykolwiek się rozjadą, gracz zobaczy „gumkę".
- * Dlatego nie wolno tu dopisać nic, co zależy od pełnego świata.
+ * Dlatego nie wolno tu dopisać nic, co zależy od pełnego świata — w tym
+ * obrażeń od Szarży, które rozstrzyga serwer w `combat.ts`.
  */
 export function applyMovement(p: PlayerState, input: InputFrame, tick: number): void {
   if (!p.alive) return;
 
+  const cls = getClass(p.classId);
+
   if (tick < p.dashEndTick) {
     // W trakcie skoku wejście nie ma wpływu — to jest zobowiązanie,
     // a nie sterowany ruch. Dzięki temu skok da się czytać u przeciwnika.
-    p.vx = p.dashDirX * DASH_SPEED;
-    p.vy = p.dashDirY * DASH_SPEED;
+    const move = MOVE_ABILITY[cls.move];
+    p.vx = p.dashDirX * move.speed;
+    p.vy = p.dashDirY * move.speed;
   } else {
     let mx = input.moveX;
     let my = input.moveY;
@@ -40,7 +41,7 @@ export function applyMovement(p: PlayerState, input: InputFrame, tick: number): 
       my /= len;
     }
 
-    const speed = BASE_SPEED * speedMultiplier(p, tick);
+    const speed = cls.speed * speedMultiplier(p, tick);
     const targetVx = mx * speed;
     const targetVy = my * speed;
 
@@ -86,15 +87,20 @@ export function clampToArena(p: PlayerState): void {
 }
 
 /**
- * Aktywacja skoku. Wydzielona z `applyMovement`, bo klient predykuje
- * skok (jest ruchem), ale NIE predykuje cienia ani fali (są rozstrzygane
- * przez serwer i widoczne dopiero w snapshocie).
+ * Aktywacja umiejętności ze slotu RUCH (Skok / Szarża / Mgnienie).
+ *
+ * Wydzielona z `applyMovement`, bo klient predykuje TYLKO ruch. Obrażenia
+ * Szarży dolicza serwer — klient przewiduje, gdzie postać wyląduje, nie
+ * kogo po drodze rozjedzie.
  */
-export function tryStartDash(p: PlayerState, input: InputFrame, tick: number): boolean {
+export function tryStartMove(p: PlayerState, input: InputFrame, tick: number): boolean {
   if (!p.alive) return false;
   if (!input.dash) return false;
-  if (tick < p.cdDash) return false;
+  if (tick < p.cdMove) return false;
   if (tick < p.dashEndTick) return false;
+
+  const cls = getClass(p.classId);
+  const move = MOVE_ABILITY[cls.move];
 
   let dx = input.moveX;
   let dy = input.moveY;
@@ -111,8 +117,9 @@ export function tryStartDash(p: PlayerState, input: InputFrame, tick: number): b
   p.dashDirX = dx;
   p.dashDirY = dy;
   p.facing = Math.atan2(dy, dx);
-  p.dashEndTick = tick + DASH_DURATION_TICKS;
-  p.cdDash = tick + DASH_COOLDOWN_TICKS;
+  p.dashEndTick = tick + move.durationTicks;
+  p.cdMove = tick + move.cooldownTicks;
+  p.dashHits.length = 0;
   return true;
 }
 
@@ -123,7 +130,7 @@ function approach(current: number, target: number, maxDelta: number): number {
 }
 
 /** Rozpychanie postaci, żeby nie stały w tym samym punkcie. */
-export function resolveOverlaps(players: PlayerState[]): void {
+export function resolveOverlaps(players: PlayerState[], tick: number): void {
   const minDist = PLAYER_RADIUS * 2;
   for (let i = 0; i < players.length; i++) {
     const a = players[i];
@@ -135,15 +142,34 @@ export function resolveOverlaps(players: PlayerState[]): void {
       const dy = b.y - a.y;
       const d = Math.hypot(dx, dy);
       if (d >= minDist || d < 1e-6) continue;
-      const push = (minDist - d) / 2;
+
+      // Postać w trakcie ruchu z rozpędu nie daje się odepchnąć — inaczej
+      // Kolos zatrzymywałby się na pierwszym napotkanym ciele, a Szarża
+      // przestałaby być wejściem w grupę.
+      const aFixed = isUnstoppable(a, tick);
+      const bFixed = isUnstoppable(b, tick);
+      if (aFixed && bFixed) continue;
+
+      // Gdy tylko jedno jest nieruchome, drugie ustępuje za oboje.
+      const push = (minDist - d) / (aFixed !== bFixed ? 1 : 2);
       const nx = dx / d;
       const ny = dy / d;
-      a.x -= nx * push;
-      a.y -= ny * push;
-      b.x += nx * push;
-      b.y += ny * push;
-      clampToArena(a);
-      clampToArena(b);
+      if (!aFixed) {
+        a.x -= nx * push;
+        a.y -= ny * push;
+        clampToArena(a);
+      }
+      if (!bFixed) {
+        b.x += nx * push;
+        b.y += ny * push;
+        clampToArena(b);
+      }
     }
   }
+}
+
+/** Czy postać jest w trakcie ruchu, którego nie da się zatrzymać ciałem. */
+function isUnstoppable(p: PlayerState, tick: number): boolean {
+  if (tick >= p.dashEndTick) return false;
+  return MOVE_ABILITY[getClass(p.classId).move].damage > 0;
 }

@@ -187,6 +187,56 @@ export class FxSystem {
     });
   }
 
+  /** Rozdarcie: krótki łuk w kierunku patrzenia, nie okrąg. */
+  rend(x: number, y: number, facing: number, range: number, colorIndex: number): void {
+    const steps = 5;
+    for (let i = 0; i < steps; i++) {
+      const t = (i + 0.5) / steps;
+      const spread = (t - 0.5) * 1.5;
+      const a = facing + spread;
+      this.emit({
+        x: x + Math.cos(a) * range * 0.62,
+        y: y + Math.sin(a) * range * 0.62,
+        height: 1.0,
+        color: PLAYER_COLORS[colorIndex % PLAYER_COLORS.length]!,
+        startScale: 2.4,
+        endScale: 0.5,
+        life: 0.26,
+        opacity: 0.85,
+      });
+    }
+  }
+
+  /** Salwa: smuga od strzelca do celu — pokazuje, kto do kogo strzela. */
+  tracer(fromX: number, fromY: number, toX: number, toY: number, colorIndex: number): void {
+    const steps = 6;
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      this.emit({
+        x: fromX + (toX - fromX) * t,
+        y: fromY + (toY - fromY) * t,
+        height: 1.2,
+        color: PLAYER_COLORS[colorIndex % PLAYER_COLORS.length]!,
+        startScale: 0.9,
+        endScale: 0.2,
+        life: 0.16 + t * 0.05,
+        opacity: 0.8,
+      });
+    }
+  }
+
+  shield(x: number, y: number, up: boolean): void {
+    this.emit({
+      x, y, height: 1.2,
+      color: up ? 0x8fd4ff : 0xffd2a0,
+      startScale: up ? 5.5 : 4.0,
+      endScale: up ? 3.8 : 8.0,
+      life: up ? 0.3 : 0.45,
+      opacity: 0.8,
+      map: getRingTexture(),
+    });
+  }
+
   supplyMarker(x: number, y: number): void {
     this.emit({
       x, y, height: 0.3,

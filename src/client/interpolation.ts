@@ -1,6 +1,6 @@
 import { INTERP_DELAY_MS } from '../sim/constants.ts';
 import type { Snapshot, PlayerView } from '../sim/snapshot.ts';
-import type { Pickup, ZoneState } from '../sim/types.ts';
+import type { ObjectiveState, Pickup, ZoneState } from '../sim/types.ts';
 
 /**
  * Bufor interpolacji (sekcja 7: „klient interpoluje 100 ms wstecz").
@@ -21,6 +21,7 @@ export interface RenderState {
   players: RenderPlayer[];
   pickups: Pickup[];
   zone: ZoneState;
+  objective: ObjectiveState;
   aliveCount: number;
   tick: number;
 }
@@ -143,6 +144,9 @@ function toRenderState(a: Snapshot, b: Snapshot | null, t: number): RenderState 
       nextRadius: source.zone.nextRadius,
       shrinking: source.zone.shrinking,
     },
+    // Rdzeń nie jest interpolowany: nie porusza się, a jego postęp ma
+    // pokazywać stan serwera, nie zgadywanie klienta.
+    objective: source.objective,
     aliveCount: source.aliveCount,
     tick: source.tick,
   };

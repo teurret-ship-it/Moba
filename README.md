@@ -59,6 +59,31 @@ Trzy decyzje projektowe, wszystkie wymuszone przez cel Fazy 1:
 3. **Serwer rozstrzyga.** Klient przysyła numer karty, nigdy efektu — indeks
    jest walidowany wobec oferty, którą serwer sam wystawił.
 
+### Rdzeń — struktura środkowej fazy
+
+Między pierwszymi potyczkami a domknięciem przez strefę runda nie miała
+własnego pytania. Zrzuty zaopatrzenia dawały powód, żeby gdzieś pójść, ale nie
+powód, żeby się o coś bić — drop podnosi pierwszy, kto dobiegnie.
+
+**Rdzeń** to punkt przejęcia ogłaszany wszystkim, i cały zamysł siedzi
+w regułach:
+
+- **stoisz w miejscu, żeby go przejąć** — a stanie w miejscu na arenie jest
+  najdroższą rzeczą, jaką można zrobić,
+- **dwóch graczy zatrzymuje postęp** — nie wygrywa szybszy, tylko ten, kto
+  zostanie sam,
+- **ukryty nie przejmuje** — inaczej Cień dawałby przejęcie nie do
+  zakwestionowania,
+- **zmiana zdobywcy zeruje postęp** — nagrodą jest utrzymanie miejsca, nie
+  dobiegnięcie na ostatnią sekundę cudzej pracy,
+- **nagrodą jest awans**, czyli karta ulepszenia — mechanika, którą gracz już
+  zna, i realna szansa dla przegrywającego, bo to on ma najwięcej powodów, żeby
+  zaryzykować.
+
+Rdzeń pojawia się dopiero, gdy zostało ≤8 graczy: punkt sporny przy dwunastu
+żywych nie jest starciem, tylko młynkiem. Ma strukturyzować środek rundy,
+a nie przyspieszać jej początek.
+
 ### Czytelność walki
 
 `docs/FAZA0.md` wymienia „nie wiem, co mnie zabiło" jako osobną skargę
@@ -150,6 +175,7 @@ src/
 │   ├── upgrades.ts     dwanaście ulepszeń i statystyki wynikowe
 │   ├── progression.ts  doświadczenie, awanse, wybór kart
 │   ├── terrain.ts      przeszkody z ziarna, kolizje, linia strzału
+│   ├── objective.ts    Rdzeń — punkt przejęcia
 │   ├── zone.ts         kurcząca się strefa
 │   ├── pickups.ts      dropy i zdarzenia mapy
 │   ├── bots.ts         AI wypełniające lobby
@@ -196,7 +222,7 @@ Wobec budżetów z sekcji 4 i 13 planu:
 
 | Metryka | Budżet | Zmierzone |
 |---|---|---|
-| Initial download | ≤15 MB (limit 20) | **~559 kB** (~145 kB gzip) |
+| Initial download | ≤15 MB (limit 20) | **~563 kB** (~146 kB gzip) |
 | Zużycie danych / mecz | ≤1,5 MB (limit 3) | **~0,22 MB** |
 | Snapshot | — | 101 B @ 15 Hz ≈ 1,5 kB/s |
 | Tick symulacji | 15–20 Hz | 20 Hz |
@@ -226,9 +252,10 @@ z sekcji 1. Trzy zmiany, każda wymierzona w zmierzoną przyczynę:
 3. **narastanie agresji botów** — bez tego wszystkie 12 botów ruszało do walki
    w sekundzie zero i runda nie miała wczesnej fazy, tylko masakrę i dogrywkę.
 
-Po dołożeniu klas, progresji i terenu tempo zmierzono ponownie. Stan obecny:
-**min 146 s, mediana 174 s, maks. 187 s**, przy zerze śmierci od strefy —
-o rundzie decydują walki, nie krąg.
+Tempo mierzone jest teraz na **24 seedach**, a próg dotyczy dziesiątego
+percentyla, nie minimum: pojedynczy przebieg, w którym wszystko zbiegło się
+naraz, jest ogonem rozkładu, a nie wadą formatu. Stan obecny:
+**p10 141 s, mediana 165 s, maks. 240 s**.
 
 Druga sonda, `classes.probe`, pilnuje równowagi klas na **120 rundach**.
 Współczynniki zwycięstw (1,0 = uczciwy udział): **Łowca 1,15 / Kolos 1,12 /

@@ -180,6 +180,19 @@ export class Hud {
         case 'supplyWarn':
           this.banner('Zrzut zaopatrzenia', 2500, now);
           break;
+        case 'objectiveWarn':
+          this.banner('Rdzeń się budzi', 2600, now);
+          break;
+        case 'objectiveSpawn':
+          this.banner('Rdzeń aktywny — stań w kręgu', 2600, now);
+          break;
+        case 'objectiveCaptured':
+          this.banner(
+            e.player === selfId ? 'Rdzeń przejęty' : `${names.get(e.player) ?? '?'} przejmuje Rdzeń`,
+            2600,
+            now,
+          );
+          break;
         case 'upgradePicked':
           if (e.player === selfId) this.banner(UPGRADES[e.upgrade].name, 1600, now);
           break;

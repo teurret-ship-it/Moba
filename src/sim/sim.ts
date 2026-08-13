@@ -18,6 +18,7 @@ import {
 import { computeBotInput, createBrain } from './bots.ts';
 import { applyMovement, resolveOverlaps, settleIntoTerrain, tryStartMove } from './movement.ts';
 import { stepPickups } from './pickups.ts';
+import { stepObjective } from './objective.ts';
 import { botPick, pickUpgrade, stepProgression, stepSurvivalXp } from './progression.ts';
 import { Rng } from './rng.ts';
 import type { InputFrame, MatchResult, PlayerState, World } from './types.ts';
@@ -36,12 +37,22 @@ import { stepZone } from './zone.ts';
 export class Simulation {
   readonly world: World;
   private readonly rng: Rng;
+  /**
+   * Osobny strumień losowości dla Rdzenia.
+   *
+   * Gdyby losował ze wspólnego, każde dotknięcie tej mechaniki przesuwałoby
+   * wszystkie późniejsze losowania w meczu — decyzje botów, spawny dropów,
+   * wszystko. Ten sam seed dawałby zupełnie inny przebieg i porównywanie
+   * pomiarów „przed i po" traciłoby sens. Ta sama zasada co przy terenie.
+   */
+  private readonly objectiveRng: Rng;
   /** Ostatnie wejście otrzymane dla każdego slotu. */
   private readonly inputs = new Map<number, InputFrame>();
 
   constructor(opts: CreateWorldOptions) {
     this.world = createWorld(opts);
     this.rng = new Rng(opts.seed ^ 0x9e3779b9);
+    this.objectiveRng = new Rng(opts.seed ^ 0x2545f491);
     for (const p of this.world.players) {
       if (p.isBot) p.ai = createBrain(this.rng, 0);
     }
@@ -148,6 +159,9 @@ export class Simulation {
 
     // 7. Strefa (może zabić — dlatego po walce, przed sprawdzeniem końca).
     stepZone(w);
+
+    // 7b. Rdzeń — po strefie, bo poza kręgiem przestaje być decyzją.
+    stepObjective(w, this.objectiveRng);
 
     // 8. Regeneracja — po strefie, żeby obrażenia od kręgu resetowały
     //    licznik jeszcze w tym samym ticku.

@@ -3,6 +3,7 @@ import { Simulation } from '../sim.ts';
 import { ARENA_RADIUS, TICK_HZ } from '../constants.ts';
 import { getClass, MOVE_ABILITY } from '../classes.ts';
 import { computeStats, xpForLevel } from '../upgrades.ts';
+import { killPlayer } from '../combat.ts';
 import { emptyInput, type InputFrame } from '../types.ts';
 
 function sim(seed = 1) {
@@ -106,6 +107,25 @@ describe('progresja w rundzie', () => {
 
     expect(p.offer.length).toBe(0);
     expect(p.upgrades.length).toBe(1);
+  });
+
+  it('śmierć zamyka wystawioną ofertę', () => {
+    // Regresja: krok progresji pomija nieżyjących, więc oferta wystawiona
+    // tuż przed śmiercią zostawała na ekranie na zawsze, z licznikiem
+    // zatrzymanym na zerze.
+    const s = sim(23);
+    s.world.phase = 'live';
+    const p = s.world.players[0]!;
+    p.xp = xpForLevel(p.level);
+    s.step();
+    expect(p.offer.length).toBe(3);
+
+    const killer = s.world.players[1]!;
+    killPlayer(s.world, p, killer.id);
+
+    expect(p.alive).toBe(false);
+    expect(p.offer.length).toBe(0);
+    expect(p.offerDeadlineTick).toBe(-1);
   });
 
   it('ulepszenia kumulują się i zmieniają statystyki', () => {

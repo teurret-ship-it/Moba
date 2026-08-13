@@ -9,6 +9,7 @@ import {
 import { getClass, CLASS_IDS, type ClassId } from './classes.ts';
 import { baseStats } from './upgrades.ts';
 import { generateTerrain, distanceToObstacle, type Obstacle } from './terrain.ts';
+import { createObjective } from './objective.ts';
 import { Rng } from './rng.ts';
 import type { PlayerState, World } from './types.ts';
 
@@ -93,6 +94,7 @@ export function createWorld(opts: CreateWorldOptions): World {
       nextRadius: ZONE_START_RADIUS,
       shrinking: false,
     },
+    objective: createObjective(),
     nextPickupId: 1,
     nextPickupSpawnTick: WARMUP_TICKS + PICKUP_SPAWN_INTERVAL_TICKS,
     nextSupplyTick: WARMUP_TICKS + SUPPLY_EVENT_INTERVAL_TICKS,

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { PLAYER_RADIUS } from '../sim/constants.ts';
+import { OBJECTIVE_RADIUS } from '../sim/objective.ts';
 import type { RenderState } from '../client/interpolation.ts';
 import { createArena, type ArenaObjects } from './arena.ts';
 import { FxSystem } from './fx.ts';
@@ -66,6 +67,11 @@ export class ArenaRenderer {
   private shakeAmount = 0;
   private elapsed = 0;
   private readonly projectionScratch = new THREE.Vector3();
+  private objectiveGroup: THREE.Group | null = null;
+  private objectiveRing!: THREE.Mesh;
+  private objectiveFill!: THREE.Mesh;
+  private objectiveBeam!: THREE.Sprite;
+  private objectivePulse = 0;
   /** Zatrzymanie klatki po mocnym trafieniu — sekundy pozostałego bezruchu. */
   private hitStop = 0;
 
@@ -90,8 +96,65 @@ export class ArenaRenderer {
     this.arena = createArena();
     this.scene.add(this.arena.group);
     this.scene.add(this.fx.group);
+    this.buildObjective();
 
     this.resize();
+  }
+
+  /** Bryły Rdzenia — tworzone raz, pokazywane i chowane wg stanu. */
+  private buildObjective(): void {
+    const group = new THREE.Group();
+    group.visible = false;
+
+    const ring = new THREE.Mesh(
+      new THREE.RingGeometry(OBJECTIVE_RADIUS - 0.35, OBJECTIVE_RADIUS, 40),
+      new THREE.MeshBasicMaterial({
+        color: 0xffc75a,
+        transparent: true,
+        opacity: 0.9,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+      }),
+    );
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.y = 0.09;
+    group.add(ring);
+
+    const fill = new THREE.Mesh(
+      new THREE.CircleGeometry(OBJECTIVE_RADIUS - 0.4, 32),
+      new THREE.MeshBasicMaterial({
+        color: 0xffc75a,
+        transparent: true,
+        opacity: 0.3,
+        depthWrite: false,
+      }),
+    );
+    fill.rotation.x = -Math.PI / 2;
+    fill.position.y = 0.07;
+    group.add(fill);
+
+    // Słup światła: Rdzeń musi być widoczny zza przeszkód, bo jest
+    // informacją globalną — inaczej „umówione starcie" gubi połowę stawki.
+    const beam = new THREE.Sprite(
+      new THREE.SpriteMaterial({
+        map: getGlowTexture(),
+        color: 0xffc75a,
+        transparent: true,
+        opacity: 0.4,
+        depthWrite: false,
+        depthTest: false,
+        blending: THREE.AdditiveBlending,
+      }),
+    );
+    beam.scale.set(3.4, 16, 1);
+    beam.position.y = 7;
+    group.add(beam);
+
+    this.scene.add(group);
+    this.objectiveGroup = group;
+    this.objectiveRing = ring;
+    this.objectiveFill = fill;
+    this.objectiveBeam = beam;
   }
 
   resize(): void {
@@ -165,12 +228,46 @@ export class ArenaRenderer {
       this.elapsed,
     );
 
+    this.syncObjective(state, dt);
     this.syncPlayers(state, self, selfId, dt);
     this.syncPickups(state);
     this.fx.update(dt);
     this.updateCamera(state, self, dt);
 
     this.renderer.render(this.scene, this.camera);
+  }
+
+  /**
+   * Rdzeń: pierścień na ziemi, słup światła i wypełnienie postępu.
+   *
+   * Kolor niesie stan, bo tekstu na ziemi nikt nie przeczyta w biegu:
+   * bursztyn = wolny, biały = ktoś przejmuje, czerwony = spór.
+   */
+  private syncObjective(state: RenderState, dt: number): void {
+    const o = state.objective;
+    if (!this.objectiveGroup) return;
+
+    this.objectiveGroup.visible = o.active;
+    if (!o.active) return;
+
+    this.objectiveGroup.position.set(o.x, 0, -o.y);
+    this.objectivePulse += dt;
+
+    const frac = Math.max(0, Math.min(1, o.progress / (4.5 * 20)));
+    const color = o.contested ? 0xff6b6b : o.holderId >= 0 ? 0xffffff : 0xffc75a;
+
+    (this.objectiveRing.material as THREE.MeshBasicMaterial).color.setHex(color);
+    (this.objectiveBeam.material as THREE.SpriteMaterial).color.setHex(color);
+
+    // Wypełnienie rośnie od środka — czytelne kątem oka, bez patrzenia
+    // na pasek u góry ekranu.
+    this.objectiveFill.scale.setScalar(Math.max(0.001, frac));
+    (this.objectiveFill.material as THREE.MeshBasicMaterial).color.setHex(color);
+    (this.objectiveFill.material as THREE.MeshBasicMaterial).opacity = 0.28 + frac * 0.3;
+
+    const pulse = 1 + Math.sin(this.objectivePulse * 4) * 0.06;
+    this.objectiveRing.scale.setScalar(pulse);
+    this.objectiveBeam.material.opacity = 0.35 + Math.sin(this.objectivePulse * 3) * 0.12;
   }
 
   private syncPlayers(

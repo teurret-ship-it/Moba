@@ -259,6 +259,15 @@ export class Game {
           this.renderer.fx.supplyMarker(e.x, e.y);
           this.sfx.play('supply', { tick: snapshot.tick });
           break;
+        case 'objectiveWarn':
+        case 'objectiveSpawn':
+          this.renderer.fx.supplyMarker(e.x, e.y);
+          this.sfx.play('supply', { tick: snapshot.tick });
+          break;
+        case 'objectiveCaptured':
+          this.renderer.fx.levelUp(e.x, e.y);
+          this.sfx.play(e.player === this.localPlayerId ? 'win' : 'zone', { tick: snapshot.tick });
+          break;
         default:
           break;
       }

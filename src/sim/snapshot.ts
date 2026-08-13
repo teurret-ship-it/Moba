@@ -7,6 +7,7 @@ import type {
   PlayerId,
   PlayerState,
   SimEvent,
+  ObjectiveState,
   World,
   ZoneState,
 } from './types.ts';
@@ -72,6 +73,14 @@ export interface Snapshot {
   players: PlayerView[];
   pickups: Pickup[];
   zone: ZoneState;
+  /**
+   * Rdzeń jest informacją GLOBALNĄ — celowo omija AoI.
+   *
+   * Punkt przejęcia działa tylko wtedy, gdy wszyscy wiedzą, gdzie jest;
+   * ukrycie go przed połową stawki zamieniłoby umówione starcie w nagrodę
+   * dla tego, kto akurat był blisko. Zdradza pozycję punktu, nie graczy.
+   */
+  objective: ObjectiveState;
   aliveCount: number;
   events: SimEvent[];
   winner: PlayerId;
@@ -167,6 +176,7 @@ export function buildSnapshot(world: World, viewerId: PlayerId): Snapshot {
     players,
     pickups: pickups.map((p) => ({ ...p })),
     zone: { ...world.zone },
+    objective: { ...world.objective },
     aliveCount: world.players.reduce((n, p) => n + (p.alive ? 1 : 0), 0),
     events: filterEvents(world, viewerId, eyeX, eyeY, aoi),
     winner: world.winner,
@@ -250,6 +260,11 @@ function filterEvents(
       case 'zoneShrink':
       case 'supplyWarn':
       case 'supplyDrop':
+      case 'objectiveWarn':
+      case 'objectiveSpawn':
+      case 'objectiveCaptured':
+        // Globalne z tego samego powodu co sam Rdzeń: umówione starcie
+        // wymaga, żeby wszyscy wiedzieli, kiedy i gdzie.
         out.push(e);
         break;
       case 'levelUp':
@@ -307,5 +322,6 @@ function withinAoi(x: number, y: number, eyeX: number, eyeY: number, aoi: number
  *  - zdarzenie: typ u8 + payload ~6 B = 7 B
  */
 export function estimateSnapshotBytes(s: Snapshot): number {
-  return 10 + s.players.length * 8 + s.pickups.length * 7 + 4 + s.events.length * 7;
+  // +6 B na Rdzeń: pozycja i16 ×2, postęp u8, flagi u8.
+  return 10 + s.players.length * 8 + s.pickups.length * 7 + 4 + 6 + s.events.length * 7;
 }

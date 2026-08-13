@@ -4,6 +4,7 @@ import type { Rng } from './rng.ts';
 import type { BotBrain, InputFrame, PlayerState, World } from './types.ts';
 import { isStealthed } from './world.ts';
 import { hasLineOfSight, distanceToObstacle } from './terrain.ts';
+import { OBJECTIVE_RADIUS } from './objective.ts';
 
 /**
  * AI botów.
@@ -89,6 +90,12 @@ export function computeBotInput(world: World, bot: PlayerState, rng: Rng): Input
   const target = brain.targetId >= 0 ? world.players[brain.targetId] : undefined;
   let goalX = brain.waypointX;
   let goalY = brain.waypointY;
+
+  // Stojąc na Rdzeniu bot nie odchodzi — o to chodzi w przejmowaniu.
+  if (brain.mood === 'core' && world.objective.active) {
+    const d = Math.hypot(world.objective.x - bot.x, world.objective.y - bot.y);
+    if (d < OBJECTIVE_RADIUS * 0.55) return input;
+  }
 
   if (target && target.alive && (brain.mood === 'hunt' || brain.mood === 'flee')) {
     if (brain.mood === 'hunt') {
@@ -179,6 +186,28 @@ function decide(world: World, bot: PlayerState, brain: BotBrain, rng: Rng): void
       brain.targetId = -1;
       brain.waypointX = heal.x;
       brain.waypointY = heal.y;
+      return;
+    }
+  }
+
+  // Priorytet 3b: Rdzeń. Bot idzie po niego, gdy jest w rozsądnym zasięgu
+  // i nie jest ciężko ranny — dokładnie tak, jak robi to gracz. Bez tego
+  // punkt przejęcia byłby darmowy dla człowieka i nie tworzyłby starcia.
+  if (world.objective.active && hpFrac > 0.45) {
+    const dx = world.objective.x - bot.x;
+    const dy = world.objective.y - bot.y;
+    const d = Math.hypot(dx, dy);
+    // Im bliżej przejęcia jest ktoś inny, tym chętniej bot się wtrąca:
+    // przerwanie cudzego postępu jest tańsze niż własne przejęcie.
+    const contestUrge = world.objective.holderId >= 0 && world.objective.holderId !== bot.id;
+    const range = contestUrge ? 30 : 22;
+    if (d < range) {
+      brain.mood = 'core';
+      brain.targetId = -1;
+      // Celujemy w środek, nie w krawędź — inaczej bot stoi tuż za obwodem
+      // i dziwi się, że postęp nie rośnie.
+      brain.waypointX = world.objective.x;
+      brain.waypointY = world.objective.y;
       return;
     }
   }

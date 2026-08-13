@@ -440,6 +440,12 @@ export function killPlayer(world: World, victim: PlayerState, killerId: number):
   victim.salvoLeft = 0;
   victim.shieldHp = 0;
 
+  // Martwy nie ma czego wybierać. Bez tego wystawiona oferta zostawała
+  // na ekranie na zawsze z licznikiem zatrzymanym na zerze, bo krok
+  // progresji pomija nieżyjących i nigdy jej nie rozstrzygał.
+  victim.offer = [];
+  victim.offerDeadlineTick = -1;
+
   const killer = killerId >= 0 && killerId !== victim.id ? world.players[killerId] : undefined;
   if (killer) {
     killer.kills += 1;

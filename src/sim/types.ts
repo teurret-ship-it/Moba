@@ -135,7 +135,7 @@ export interface BotBrain {
   driftPhase: number;
 }
 
-export type BotMood = 'roam' | 'hunt' | 'flee' | 'loot' | 'rezone';
+export type BotMood = 'roam' | 'hunt' | 'flee' | 'loot' | 'rezone' | 'core';
 
 export type PickupKind = 'heal' | 'speed' | 'damage';
 
@@ -156,6 +156,22 @@ export interface ZoneState {
   shrinking: boolean;
 }
 
+/** Rdzeń — punkt przejęcia, struktura środkowej fazy rundy. */
+export interface ObjectiveState {
+  active: boolean;
+  x: number;
+  y: number;
+  /** Postęp w tickach nieprzerwanego stania. */
+  progress: number;
+  /** Kto aktualnie przejmuje (-1 = nikt). */
+  holderId: PlayerId;
+  /** Dwóch lub więcej w środku — postęp stoi. */
+  contested: boolean;
+  nextSpawnTick: number;
+  warnedTick: number;
+  expiresTick: number;
+}
+
 export type MatchPhase = 'warmup' | 'live' | 'over';
 
 /** Zdarzenia jednorazowe — konsumowane przez render/HUD, nie trzymane w stanie. */
@@ -174,6 +190,9 @@ export type SimEvent =
   | { type: 'supplyWarn'; x: number; y: number; tick: number }
   | { type: 'supplyDrop'; x: number; y: number; tick: number }
   | { type: 'zoneShrink'; radius: number; tick: number }
+  | { type: 'objectiveWarn'; x: number; y: number; tick: number }
+  | { type: 'objectiveSpawn'; x: number; y: number; tick: number }
+  | { type: 'objectiveCaptured'; player: PlayerId; x: number; y: number; tick: number }
   | { type: 'levelUp'; player: PlayerId; level: number; tick: number }
   | { type: 'upgradePicked'; player: PlayerId; upgrade: UpgradeId; tick: number }
   | { type: 'revive'; player: PlayerId; x: number; y: number; tick: number }
@@ -188,6 +207,7 @@ export interface World {
   players: PlayerState[];
   pickups: Pickup[];
   zone: ZoneState;
+  objective: ObjectiveState;
   nextPickupId: number;
   nextPickupSpawnTick: number;
   nextSupplyTick: number;

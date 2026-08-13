@@ -107,7 +107,10 @@ export const UPGRADES: Record<UpgradeId, UpgradeDef> = {
     glyph: '☾', maxStacks: 2, classId: 'lowca',
   },
   pancerz: {
-    id: 'pancerz', name: 'Pancerz', text: 'Tarcza pochłania +20 obrażeń',
+    // +20 na stos przy trzech stosach dawało Tarczy 94 pochłoniętych obrażeń
+    // wobec 34 bazowych — Kolos wychodził z rundy praktycznie nie do zabicia
+    // (wsp. 1,26 +/- 0,11, najdłuższe przeżycie w stawce po Widmie).
+    id: 'pancerz', name: 'Pancerz', text: 'Tarcza pochłania +14 obrażeń',
     glyph: '⛨', maxStacks: 3, classId: 'kolos',
   },
   taran: {
@@ -248,7 +251,7 @@ export function computeStats(classId: ClassId, upgrades: readonly UpgradeId[]): 
     salvoBonusShots: count('grad'),
     stealthBonusTicks: Math.round(1.5 * TICK_HZ) * count('czajenie'),
     stealthSpeedMul: Math.pow(1.1, count('czajenie')),
-    shieldBonusAbsorb: 20 * count('pancerz'),
+    shieldBonusAbsorb: 14 * count('pancerz'),
     chargeBonusDamage: 12 * count('taran'),
     chargeBonusKnockback: 10 * count('taran'),
     ambushBonus: 0.6 * count('zasadzka'),

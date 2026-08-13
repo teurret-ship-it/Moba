@@ -139,7 +139,14 @@ export const CLASSES: Record<ClassId, ClassDef> = {
     // co spina się z jej własnym kitem: spowolniony przeciwnik nie ucieknie
     // przed ciągłym ostrzałem. Bez tego Kuglarz miał 0,35 eliminacji na
     // postać przy ~1,0 u pozostałych.
-    maxHp: 105,
+    // 105 -> 112. Najtrwalszy sygnał z całego pomiaru: Kuglarz ginie
+    // 15-22 sekundy wcześniej niż reszta stawki (70 s wobec 85-92 s),
+    // i to w każdym kolejnym przebiegu, przy każdej wersji AI. Powód jest
+    // strukturalny — jako jedyny nie ma mocy zadającej obrażenia, więc
+    // potrzebuje więcej CZASU w starciu, żeby zamienić przewagę
+    // auto-ataku na eliminację. Przy tej samej kruchości po prostu
+    // przegrywa wymianę, zanim zdąży ją wygrać.
+    maxHp: 112,
     speed: 9.8,
     attackRange: 6.5,
     attackDamage: 6.6,
@@ -206,7 +213,16 @@ export const TRICK_ABILITY = {
   tarcza: {
     cooldownTicks: Math.round(12 * TICK_HZ),
     durationTicks: Math.round(5 * TICK_HZ),
-    /** Ile obrażeń pochłania, zanim pęknie. */
+    /**
+     * Ile obrażeń pochłania, zanim pęknie.
+     *
+     * Wartość wróciła do 34 po ścięciu do 28. Ścięcie było reakcją na
+     * wsp. 1,30 Kolosa — a ten wynik brał się z tego, że Widmo popełniało
+     * masowe samobójstwa na strefie i oddawało finały. Po naprawieniu weta
+     * strefy Kolos spadł do 0,77 i okazało się, że nerf leczył objaw cudzej
+     * choroby. Trzeci raz w tym projekcie, kiedy pozorna nierównowaga klas
+     * była w istocie błędem gdzie indziej.
+     */
     absorb: 34,
   },
   // Zwód stoi nieruchomo i wygląda dokładnie jak właściciel. Dla botów jest
@@ -214,7 +230,19 @@ export const TRICK_ABILITY = {
   zwod: {
     cooldownTicks: Math.round(13 * TICK_HZ),
     durationTicks: Math.round(6 * TICK_HZ),
-    hp: 45,
+    // 45 -> 60. Zwód jest jedynym narzędziem przetrwania Kuglarza (Sidła
+    // nie ranią, Zamiana wymaga kopii), a klasa ginęła najszybciej w stawce:
+    // 68 s przeżycia wobec 84-87 s u pozostałych, przy wsp. 0,69 +/- 0,08.
+    // Kopia musi wytrzymać na tyle długo, żeby zdążyć się z nią zamienić.
+    hp: 60,
+    /**
+     * Jak daleko przed siebie leci kopia.
+     *
+     * Nieco mniej niż zasięg auto-ataku Kuglarza (6,5): rzucona w stronę
+     * przeciwnika ląduje między wami, więc konkuruje o jego cios, a zamiana
+     * z nią jest realnym wejściem, nie kosmetyką.
+     */
+    throwDistance: 6.0,
   },
 } as const;
 
@@ -224,7 +252,10 @@ export const POWER_ABILITY = {
     cooldownTicks: Math.round(9 * TICK_HZ),
     shots: 3,
     intervalTicks: Math.round(0.12 * TICK_HZ),
-    damagePerShot: 10,
+    // 10 -> 8. Przy trzech pociskach Salwa dawała 30 obrażeń z zasięgu 8,
+    // czyli więcej niż Fala Kolosa z 9 jednostek i bez konieczności wejścia
+    // w kontakt. Pomiar na 400 rundach: Łowca 1,49 +/- 0,12 przy uczciwym 1,0.
+    damagePerShot: 8,
     range: 8.0,
   },
   fala: {
@@ -237,7 +268,11 @@ export const POWER_ABILITY = {
   // Stożek przed sobą. Krótki zasięg, wysokie obrażenia — i podwójne,
   // jeśli wychodzisz z ukrycia. To jest cała ekonomia Widma.
   rozdarcie: {
-    cooldownTicks: Math.round(7 * TICK_HZ),
+    // 7 s -> 6 s. Widmo ma dobre eliminacje (1,03 na postać) i normalne
+    // przeżycie, ale najgorszą zamianę tego na wygrane (0,56 +/- 0,07) —
+    // przegrywa końcówkę, w której liczy się, ile razy zdąży zadać cios
+    // z ukrycia, zanim skończy się dystans do uciekania.
+    cooldownTicks: Math.round(6 * TICK_HZ),
     windupTicks: Math.round(0.12 * TICK_HZ),
     range: 7.5,
     /** Połowa kąta stożka w radianach. */

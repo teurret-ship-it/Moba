@@ -38,11 +38,13 @@ przy jednej ręce na telefonie to warunek, nie wygoda.
 | **Łowca** | koło, 100 HP | ➤ Skok | ◍ Cień | ⁙ Salwa — 3 strzały z dystansu |
 | **Kolos** | sześciokąt, 120 HP | ⏵ Szarża — tratuje i odrzuca | ❖ Tarcza — pochłania 40 obrażeń | ✸ Fala — wybuch dookoła |
 | **Widmo** | grot, 102 HP | ⇢ Mgnienie — teleport przez mur | ◍ Cień | ✦ Rozdarcie — stożek, z ukrycia ×2 |
-| **Kuglarz** | dwa koła, 105 HP | ⇄ Zamiana — zamiana miejsc z kopią | ⧉ Zwód — nieruchoma kopia | ❋ Sidła — obszarowe spowolnienie |
+| **Kuglarz** | dwa koła, 112 HP | ⇄ Zamiana — zamiana miejsc z kopią | ⧉ Zwód — kopia rzucana przed siebie | ❋ Sidła — obszarowe spowolnienie |
 
 **Kuglarz nie walczy o pozycję — walczy o to, gdzie przeciwnik myśli, że jesteś.**
 Cała jego trójka działa razem: stawiasz kopię, wróg bije w nią, ty zamieniasz się
-z nią miejscami i lądujesz mu za plecami. Kopia jest dla botów nieodróżnialna od
+z nią miejscami i lądujesz mu za plecami. **Kopia leci tam, dokąd idziesz** —
+uciekasz, to zostaje na drodze ucieczki i zamiana wyrywa cię z kontaktu;
+nacierasz, to ląduje między wami i zamiana jest wejściem. Kopia jest dla botów nieodróżnialna od
 gracza — konkuruje o ich auto-atak na tych samych zasadach, więc dają się nabrać
 tak samo jak człowiek. Jako jedyna klasa nie ma mocy zadającej obrażenia, więc
 rekompensatą jest najwyższe obrażenie na sekundę z auto-ataku: spowolniony
@@ -283,9 +285,31 @@ naraz, jest ogonem rozkładu, a nie wadą formatu. Stan obecny:
 **p10 149 s, mediana 191 s, maks. 240 s** — mediana po raz pierwszy mieści się
 w przedziale 3–6 minut z sekcji 1.
 
-Druga sonda, `classes.probe`, pilnuje równowagi klas na **120 rundach**.
-Współczynniki zwycięstw (1,0 = uczciwy udział): **Łowca 1,14 / Kolos 1,28 /
-Widmo 0,62 / Kuglarz 0,96**.
+Tempo urosło jeszcze raz, ubocznie: po naprawieniu weta strefy (niżej) boty
+przestały ginąć na własne życzenie i **mediana wynosi 186 s, p10 159 s**.
+
+Druga sonda, `classes.probe`, pilnuje równowagi klas na **240 rundach**.
+Decyzje o strojeniu podejmuję jednak na osobnym pomiarze 400-rundowym
+z policzonym błędem — sonda w repozytorium jest bramką regresji, nie
+narzędziem strojenia.
+
+Zmierzony stan (400 rund, błąd standardowy przy rozkładzie Poissona):
+
+| | początek iteracji 10 | koniec |
+|---|---|---|
+| Łowca | 1,49 ± 0,12 | **1,15 ± 0,11** |
+| Kolos | 1,28 ± 0,11 | **1,21 ± 0,11** |
+| Widmo | 0,56 ± 0,07 | **0,87 ± 0,09** |
+| Kuglarz | 0,69 ± 0,08 | **0,78 ± 0,09** |
+
+Rozrzut spadł z 0,93 do 0,43.
+
+> **Sonda na 120 rundach mnie okłamywała.** Odczyt „1,14 / 1,28 / 0,62 / 0,96",
+> na podstawie którego zamknąłem poprzednią iterację, przy 400 rundach okazał
+> się „1,49 / 1,28 / 0,56 / 0,69" — myliłem się co do tego, która klasa
+> dominuje. Błąd ±0,22 przy 120 rundach był w kodzie opisany od dawna; i tak
+> odczytywałem z tej próby różnice mniejsze niż on. Próba jest teraz
+> dwukrotnie większa, a każda decyzja o strojeniu ma przy sobie błąd.
 
 > Próba jest duża celowo. Przy 60 rundach na klasę wypada ~20 zwycięstw,
 > a szum Poissona na takiej liczbie to ±0,22 na współczynniku — strojenie
@@ -342,6 +366,47 @@ dostał, a jest po drugiej stronie tabeli.
 - *Boty zbiegały się na jedną ofiarę.* Pół lobby brało ten sam cel, który ginął
   w sekundy niezależnie od tempa rampy agresji. Kara za tłok w wyborze celu
   przywróciła wczesnej fazie kształt potyczek.
+
+### Trzy mechanizmy, które działały tylko na papierze
+
+Iteracja 10 nie dołożyła treści — obeszła to, co już było, i sprawdziła
+pomiarem, czy naprawdę działa. Trzy rzeczy nie działały.
+
+**1. Zamiana Kuglarza nie zdarzała się nigdy.** Klasa jest opisana zdaniem
+„stawiasz kopię, wróg bije w nią, ty zamieniasz się z nią miejscami". Pomiar
+na 6807 tickach, w których bot miał postawioną kopię i gotową Zamianę:
+opłacalna zamiana istniała w **0,9%** z nich. Powód był geometryczny — kopia
+stawała dokładnie pod nogami właściciela, więc zamiana z nią nie zmieniała
+niczego. Mediana różnicy odległości (kopia→cel) − (ja→cel) wynosiła 0,2.
+
+Kopia leci teraz **tam, dokąd idziesz** (a gdy stoisz — tam, gdzie patrzysz).
+Jedna reguła, bez trybu: uciekasz — kopia zostaje na twojej drodze ucieczki
+i zamiana wyrywa cię z kontaktu; nacierasz — kopia ląduje między wami i
+zamiana jest wejściem. Zamiany na postawioną kopię: 0,54 → 1,0.
+
+**2. Boty popełniały samobójstwa slotem RUCH.** Pomiar końcówki na 200
+rundach, w momencie gdy zostaje trzech:
+
+| | w finale | konwersja na wygraną | zgony od strefy |
+|---|---|---|---|
+| Łowca | 186 | 0,39 | 12 |
+| Kolos | 134 | 0,37 | 1 |
+| **Widmo** | **169** | **0,20** | **51** |
+| Kuglarz | 110 | 0,40 | 0 |
+
+Widmo docierało do finału częściej niż Kolos i Kuglarz, z takim samym
+zdrowiem i poziomem — i przegrywało. Mgnienie przenosi 10,5 jednostki w
+jednym ticku, a w końcówce krąg ma kilkanaście jednostek średnicy: uciekający
+bot wyskakiwał z niego na wylot. Bot ma teraz weto strefy, liczone z tych
+samych parametrów co symulacja. Zgony od strefy: 51 → 7, konwersja 0,20 → 0,29.
+
+To był **trzeci raz**, kiedy pozorna nierównowaga klas okazała się błędem
+gdzie indziej — i drugi raz, kiedy dotyczyło to tego samego slotu RUCH Widma.
+
+**3. Nerf, który leczył cudzą chorobę.** Zanim znalazłem weto strefy, ściąłem
+Tarczę Kolosa (34 → 28), bo miał najwyższy współczynnik. Po naprawieniu
+Widma Kolos spadł do 0,77 — jego „dominacja" brała się z tego, że ktoś inny
+oddawał finały. Wartość wróciła do 34.
 
 **Jeden błąd znaleziony przez test, który sam był błędny.** Karta *Czajenie*
 obiecywała, że „Cień nie spowalnia" — a ukrycie w tej grze nigdy nie

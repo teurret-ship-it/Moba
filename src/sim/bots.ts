@@ -1,5 +1,5 @@
-import { TICK_HZ, WARMUP_TICKS } from './constants.ts';
-import { getClass, POWER_ABILITY } from './classes.ts';
+import { DT, TICK_HZ, WARMUP_TICKS } from './constants.ts';
+import { getClass, MOVE_ABILITY, POWER_ABILITY } from './classes.ts';
 import type { Rng } from './rng.ts';
 import type { BotBrain, InputFrame, PlayerState, World } from './types.ts';
 import { isStealthed } from './world.ts';
@@ -385,6 +385,30 @@ function chooseAbilities(
   // celowe. Kopia konkuruje o jego auto-atak na tych samych zasadach co
   // gracz (`stepAutoAttacks`), więc daje się nabrać tak samo jak człowiek.
 
+  // Kolejność ma znaczenie akurat dla jednej klasy.
+  //
+  // Reszta wybiera sloty w porządku MOC → RUCH → SZTUCZKA i to jest dobra
+  // heurystyka: najpierw wydaj to, co najmocniejsze. Kuglarz ma jednak kit
+  // sekwencyjny — Zamiana bez postawionej kopii nie robi nic, a kopię stawia
+  // SZTUCZKA. Przy zwykłej kolejności bot w opałach wydawał Sidła, potem
+  // pustą Zamianę i dopiero na końcu stawiał kopię, czyli nigdy nie miał
+  // z czym się zamienić w chwili, gdy tego potrzebował.
+  //
+  // Uczciwie: sama ta zmiana nie ruszyła wyniku klasy (0,72 -> 0,69 przy
+  // błędzie 0,08, czyli w granicach szumu). Zostaje, bo kolejność „najpierw
+  // ustaw, potem użyj" jest poprawna dla kitu sekwencyjnego niezależnie od
+  // tego, ile daje w liczbach — ale deficyt przetrwania Kuglarza miał inną
+  // przyczynę i został naprawiony gdzie indziej.
+  if (cls.trick === 'zwod' && world.tick >= bot.cdTrick) {
+    const hasDecoy = world.decoys.some((d) => d.ownerId === bot.id);
+    const setupEscape = brain.mood === 'flee';
+    const setupEntry = brain.mood === 'hunt' && distToTarget > cls.attackRange;
+    if (!hasDecoy && (setupEscape || setupEntry) && distToTarget < cls.attackRange * 2.6) {
+      input.stealth = true;
+      return;
+    }
+  }
+
   // --- Slot MOC ---
   // Każda moc ma inny zasięg i inny moment, w którym warto ją wydać.
   if (world.tick >= bot.cdPower) {
@@ -424,16 +448,36 @@ function chooseAbilities(
     let wants = needsZone;
 
     if (cls.move === 'zamiana') {
-      // Zamiana opłaca się tylko z postawioną kopią — i wtedy jest ucieczką
-      // albo natychmiastowym wejściem, zależnie od tego, gdzie kopia stoi.
+      // Zamiana opłaca się tylko z postawioną kopią — i wtedy jest wejściem
+      // albo ucieczką, zależnie od tego, gdzie kopia stoi.
+      //
+      // Progi (+6 / −5) były zgadnięte i geometria ich nie osiągała. Pomiar
+      // na 7684 tickach, w których bot-Kuglarz miał kopię i gotową Zamianę:
+      // warunek wejścia spełniony 3 razy, ucieczki 30 — czyli 0,4% czasu.
+      // Klasa nigdy nie grała tym, co ją definiuje, i miała najniższe
+      // eliminacje na postać w całej stawce (0,66 przy 1,08 Łowcy).
+      //
+      // Rozkład różnicy (kopia→cel) − (bot→cel) pokazał dlaczego: mediana
+      // −0,4, a w ucieczce −3,0 przy p90 = +2,5. Kopia zostaje TAM, gdzie
+      // była walka, więc uciekający bot oddala się także od niej. Próg +6
+      // był nieosiągalny z definicji, a nie rzadki.
       const decoy = world.decoys.find((d) => d.ownerId === bot.id);
       if (decoy) {
         const decoyToTarget = target && target.alive
           ? Math.hypot(target.x - decoy.x, target.y - decoy.y)
           : Infinity;
-        const escaping = brain.mood === 'flee' && decoyToTarget > distToTarget + 6;
-        const closing = brain.mood === 'hunt' && decoyToTarget < distToTarget - 5;
-        wants ||= escaping || closing;
+        const gain = decoyToTarget - distToTarget;
+        // Wejście: kopia jest bliżej celu niż ja, a ja nie mam go w zasięgu.
+        // To jest ten combo z opisu klasy — wróg bije w kopię, a ja ląduję
+        // mu za plecami.
+        const closing = brain.mood === 'hunt' && gain < -2 && distToTarget > cls.attackRange;
+        // Ucieczka: rzadsza, bo geometria jej nie sprzyja, ale gdy kopia
+        // faktycznie stoi dalej od celu, zamiana zrywa kontakt natychmiast.
+        const escaping = brain.mood === 'flee' && gain > 3;
+        // I przypadek awaryjny: przy niskim zdrowiu każdy skok od celu jest
+        // lepszy niż bieg, bo biegu da się dogonić.
+        const bailing = hpFrac < 0.35 && gain > 2;
+        wants ||= closing || escaping || bailing;
       }
     } else if (cls.move === 'szarza') {
       // Kolos szarżuje DO walki, nie z niej. Ucieczka szarżą to marnotrawstwo,
@@ -447,7 +491,19 @@ function chooseAbilities(
       wants ||= wantsGap || wantsClose;
     }
 
-    if (wants && rng.bool(0.2 + 0.5 * brain.skill)) {
+    // Weto strefy: nie wyskakuj poza krąg.
+    //
+    // Najkosztowniejszy pojedynczy błąd, jaki znalazł pomiar końcówki.
+    // Na 200 rundach Widmo docierało do finałowej trójki 169 razy — częściej
+    // niż Kolos i Kuglarz — z tym samym zdrowiem i poziomem co reszta,
+    // a wygrywało tylko 20% tych finałów wobec 37–40% u pozostałych.
+    // Różnicę tłumaczy jedna liczba: 51 śmierci od strefy wobec 12 / 1 / 0.
+    //
+    // Mgnienie przenosi 10,5 jednostki w jednym ticku, a w końcówce krąg ma
+    // kilkanaście jednostek średnicy — uciekający bot wyskakiwał więc z niego
+    // na wylot. To nie jest problem siły klasy, tylko decyzji, której bot
+    // nie umiał podjąć: człowiek nie teleportuje się w burzę.
+    if (wants && rng.bool(0.2 + 0.5 * brain.skill) && !leavesZone(world, bot, input)) {
       input.dash = true;
       return;
     }
@@ -513,6 +569,41 @@ function chooseAbilities(
  * więc „minus 2,5" zostawiało margines, który znikał przy pierwszym
  * zacieśnieniu.
  */
+/**
+ * Czy skok w zamierzonym kierunku wyniesie bota poza bezpieczny krąg?
+ *
+ * Liczone z tych samych parametrów, z których liczy to symulacja, więc
+ * odpowiedź jest dokładna, a nie przybliżona. Wyjątkiem jest powrót do
+ * strefy: gdy bot i tak jest na zewnątrz, skok do środka zawsze wolno.
+ */
+function leavesZone(world: World, bot: PlayerState, input: InputFrame): boolean {
+  const move = MOVE_ABILITY[getClass(bot.classId).move];
+  const reach = move.speed * move.durationTicks * DT;
+
+  let dx = input.moveX;
+  let dy = input.moveY;
+  const len = Math.hypot(dx, dy);
+  if (len < 0.001) {
+    dx = Math.cos(bot.facing);
+    dy = Math.sin(bot.facing);
+  } else {
+    dx /= len;
+    dy /= len;
+  }
+
+  const zone = world.zone;
+  const here = Math.hypot(bot.x - zone.x, bot.y - zone.y);
+  const there = Math.hypot(bot.x + dx * reach - zone.x, bot.y + dy * reach - zone.y);
+
+  // Zapas: krawędź strefy nie jest miejscem, w którym chce się lądować,
+  // bo krąg kurczy się dalej.
+  const safe = zone.radius * 0.9;
+  if (there <= safe) return false;
+  // Skok, który przybliża do środka, jest zawsze dozwolony — inaczej bot
+  // złapany na zewnątrz nie miałby czym wrócić.
+  return there >= here;
+}
+
 function pullIntoZone(world: World, x: number, y: number): { x: number; y: number } {
   const dx = x - world.zone.x;
   const dy = y - world.zone.y;

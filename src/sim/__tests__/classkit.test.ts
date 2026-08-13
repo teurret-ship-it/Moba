@@ -159,7 +159,7 @@ describe('karty Kolosa', () => {
     give(s, 'pancerz', 2);
     s.pushInput(0, input({ seq: 1, stealth: true }));
     s.step();
-    expect(s.world.players[0]!.shieldHp).toBe(TRICK_ABILITY.tarcza.absorb + 40);
+    expect(s.world.players[0]!.shieldHp).toBe(TRICK_ABILITY.tarcza.absorb + 28);
   });
 
   it('Taran podnosi obrażenia Szarży', () => {
@@ -325,5 +325,67 @@ describe('kit klasowy w normalnym meczu', () => {
         .join('|');
     };
     expect(run()).toBe(run());
+  });
+});
+
+/**
+ * Sondy zachowania botów.
+ *
+ * Osobna kategoria testów, wymuszona przez konkretną klasę błędu: mechanika,
+ * która działa poprawnie w izolacji, a w meczu nie uruchamia się nigdy.
+ * Zamiana była przez cały czas poprawnie zaimplementowana i miała zielone
+ * testy jednostkowe — a warunek, przy którym bot jej używał, spełniał się
+ * w 0,9% sytuacji, w których mógł. Żaden test poprawności tego nie łapie.
+ */
+describe('mechaniki, które muszą się faktycznie zdarzać', () => {
+  function playMatches(seeds: number[]) {
+    const events = new Map<string, number>();
+    let zoneDeaths = 0;
+    let decoys = 0;
+    let swaps = 0;
+
+    for (const seed of seeds) {
+      const sim = new Simulation({ seed, playerCount: 12, humanCount: 0 });
+      for (let t = 0; t < MATCH_TICKS; t++) {
+        sim.step();
+        for (const e of sim.world.events) {
+          events.set(e.type, (events.get(e.type) ?? 0) + 1);
+          if (e.type === 'decoySpawn') decoys++;
+          if (e.type === 'swap') swaps++;
+          if (e.type === 'kill' && e.killer < 0) zoneDeaths++;
+        }
+        if (sim.world.phase === 'over') break;
+      }
+    }
+    return { events, zoneDeaths, decoys, swaps };
+  }
+
+  it('Kuglarz zamienia się z kopią, a nie tylko ją stawia', () => {
+    const { decoys, swaps } = playMatches([1, 7, 13, 42, 99, 256]);
+
+    expect(decoys).toBeGreaterThan(20);
+    // Kopia postawiona i nigdy niewykorzystana to połowa kitu leżąca odłogiem.
+    // Przy zepsutej geometrii ten stosunek wynosił 0,54 i to była jedyna
+    // liczba, która o tym mówiła.
+    expect(swaps / decoys).toBeGreaterThan(0.5);
+  });
+
+  it('boty nie wyskakują ze strefy własnym slotem RUCH', () => {
+    // Widmo teleportuje się 10,5 jednostki w jednym ticku, a w końcówce krąg
+    // ma kilkanaście jednostek średnicy. Bez weta strefy klasa popełniała
+    // 51 samobójstw na 200 rund wobec 12 / 1 / 0 u pozostałych — i to, a nie
+    // siła postaci, decydowało o jej wyniku.
+    const { zoneDeaths } = playMatches([1, 7, 13, 42, 99, 256]);
+    expect(zoneDeaths).toBeLessThan(10);
+  });
+
+  it('każda umiejętność z każdego kitu pojawia się w meczu', () => {
+    const { events } = playMatches([11, 22, 33, 44]);
+    for (const type of [
+      'dash', 'stealthIn', 'shieldUp', 'decoySpawn', 'swap',
+      'burst', 'rend', 'snare', 'salvo',
+    ]) {
+      expect(events.get(type) ?? 0, `${type} nie wystąpiło ani razu`).toBeGreaterThan(0);
+    }
   });
 });

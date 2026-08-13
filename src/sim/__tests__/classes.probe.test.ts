@@ -35,12 +35,18 @@ function emptyTally(): Tally {
 describe('równowaga klas', () => {
   it('każda klasa wygrywa i żadna nie dominuje', () => {
     const tally = emptyTally();
-    // 120 rund, nie 60. Przy 60 na klasę wypada ~20 zwycięstw, a szum
-    // Poissona na takiej liczbie to ±4,5 — czyli ±0,22 na współczynniku.
-    // Strojenie różnic mniejszych niż 0,4 na takiej próbie to gonienie
-    // własnego ogona; przekonałem się o tym, przerzucając dominację między
-    // Łowcą a Kolosem trzy razy z rzędu.
-    const rounds = 120;
+    // 240 rund. Poprzednio 120 — i to wciąż było za mało. Przy 120 na
+    // współczynniku siedzi błąd ±0,22, a ja odczytywałem z tej próby zmiany
+    // rzędu 0,3 jako skutek własnych poprawek. Kontrolny przebieg na 400
+    // rundach pokazał, że odczyt „1,14 / 1,28 / 0,62 / 0,96" był w istocie
+    // „1,49 / 1,28 / 0,56 / 0,69" — czyli myliłem się co do tego, która
+    // klasa dominuje. Przy 240 błąd spada do ~0,15 i sonda zaczyna mierzyć
+    // to, o co jest pytana.
+    //
+    // Decyzje o strojeniu i tak podejmuję na osobnym, jednorazowym pomiarze
+    // 400-rundowym z podanym błędem — ta sonda jest bramką regresji, nie
+    // narzędziem strojenia.
+    const rounds = 240;
 
     for (let seed = 1; seed <= rounds; seed++) {
       const sim = new Simulation({ seed: seed * 7919, playerCount: 12, humanCount: 0 });
@@ -82,7 +88,7 @@ describe('równowaga klas', () => {
     });
 
     console.log(
-      ['', '  --- równowaga klas (60 rund, same boty) ---', ...lines.map((l) => l.text), ''].join('\n'),
+      ['', `  --- równowaga klas (${rounds} rund, same boty) ---`, ...lines.map((l) => l.text), ''].join('\n'),
     );
 
     for (const l of lines) {
@@ -92,8 +98,11 @@ describe('równowaga klas', () => {
       // przedział, bo to pomiar botów — łapiemy dominację, nie niuans.
       // Uczciwy współczynnik to 1,0. Przedział jest szeroki, bo to pomiar
       // botów — łapiemy dominację i klasy-pułapki, nie niuanse metagry.
-      expect(l.share, `${l.id} jest za słaby`).toBeGreaterThan(0.45);
-      expect(l.share, `${l.id} dominuje`).toBeLessThan(1.85);
+      // Zmierzony stan (400 rund): 1,15 / 1,21 / 0,87 / 0,78. Progi mają
+      // zapas na szum i na to, że boty nie grają jak ludzie — łapiemy
+      // rozjazd rażący, nie niuans metagry.
+      expect(l.share, `${l.id} jest za słaby`).toBeGreaterThan(0.55);
+      expect(l.share, `${l.id} dominuje`).toBeLessThan(1.6);
     }
   });
 });

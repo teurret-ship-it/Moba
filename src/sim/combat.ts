@@ -1,4 +1,5 @@
 import {
+  ARENA_RADIUS,
   DT,
   PICKUP_DAMAGE_MUL,
   PLAYER_RADIUS,
@@ -17,7 +18,7 @@ import { computeStats, XP_PER_DAMAGE, XP_PER_KILL } from './upgrades.ts';
 import { grantXp } from './progression.ts';
 import type { InputFrame, PlayerState, World } from './types.ts';
 import { isStealthed } from './world.ts';
-import { hasLineOfSight } from './terrain.ts';
+import { hasLineOfSight, pushOutOfObstacles } from './terrain.ts';
 
 /**
  * Cała walka jest rozstrzygana tutaj, po stronie autorytatywnej.
@@ -124,13 +125,47 @@ export function tryStartTrick(world: World, p: PlayerState, input: InputFrame): 
     for (let i = world.decoys.length - 1; i >= 0; i--) {
       if (world.decoys[i]!.ownerId === p.id) world.decoys.splice(i, 1);
     }
+    // Kopia leci PRZED siebie, nie staje pod nogami.
+    //
+    // Wcześniej stawała dokładnie w miejscu właściciela i to wyglądało na
+    // czystszy projekt („zdradzasz miejsce, w którym byłeś"), ale odbierało
+    // sens drugiej połowie kitu. Pomiar: na 6807 tickach, w których bot-Kuglarz
+    // miał kopię i gotową Zamianę, opłacalna zamiana istniała w 0,9% z nich.
+    // Mediana różnicy odległości (kopia→cel) − (ja→cel) wynosiła 0,2 — kopia
+    // stała tam, gdzie ja, więc zamiana z nią nie zmieniała niczego.
+    //
+    // Kopia leci TAM, DOKĄD IDZIESZ — a gdy stoisz, tam, gdzie patrzysz.
+    //
+    // Pierwsza wersja rzutu szła zawsze za `facing`, czyli w stronę
+    // przeciwnika, i to naprawiło combo wejściowe („wróg bije w kopię, ty
+    // lądujesz mu za plecami"), ale odebrało Kuglarzowi jedyną ucieczkę:
+    // zamiana zawsze ciągnęła go w stronę zagrożenia. Klasa ginęła 15–22 s
+    // wcześniej od reszty stawki (70 s wobec 85–92 s) przy wsp. 0,64.
+    //
+    // Kierunek ruchu rozstrzyga to jedną regułą i bez trybu: uciekasz —
+    // kopia zostaje na twojej drodze ucieczki i zamiana wyrywa cię z kontaktu;
+    // nacierasz — kopia ląduje między wami i zamiana jest wejściem.
+    // Zobowiązanie zostaje: kopia jest nieruchomym punktem, który zdradza,
+    // gdzie zamierzasz być.
+    const moveLen = Math.hypot(input.moveX, input.moveY);
+    const dirX = moveLen > 0.1 ? input.moveX / moveLen : Math.cos(p.facing);
+    const dirY = moveLen > 0.1 ? input.moveY / moveLen : Math.sin(p.facing);
+    const spot = { x: p.x + dirX * def.throwDistance, y: p.y + dirY * def.throwDistance, vx: 0, vy: 0 };
+    const far = Math.hypot(spot.x, spot.y);
+    const limit = ARENA_RADIUS - PLAYER_RADIUS;
+    if (far > limit) {
+      spot.x *= limit / far;
+      spot.y *= limit / far;
+    }
+    // Kopia w murze byłaby nie do trafienia, a zamiana z nią wsadzałaby
+    // właściciela w przeszkodę.
+    pushOutOfObstacles(spot, world.obstacles);
+
     world.decoys.push({
       id: world.nextDecoyId++,
       ownerId: p.id,
-      // Kopia staje tam, gdzie stoisz — więc postawienie jej jest zawsze
-      // zobowiązaniem: zdradza miejsce, w którym byłeś.
-      x: p.x,
-      y: p.y,
+      x: spot.x,
+      y: spot.y,
       hp: def.hp + p.stats.decoyBonusHp,
       maxHp: def.hp + p.stats.decoyBonusHp,
       colorIndex: p.colorIndex,
@@ -138,7 +173,7 @@ export function tryStartTrick(world: World, p: PlayerState, input: InputFrame): 
       endTick: world.tick + def.durationTicks + p.stats.decoyBonusTicks,
     });
     p.cdTrick = world.tick + Math.round(def.cooldownTicks * p.stats.cooldownMul);
-    world.events.push({ type: 'decoySpawn', player: p.id, x: p.x, y: p.y, tick: world.tick });
+    world.events.push({ type: 'decoySpawn', player: p.id, x: spot.x, y: spot.y, tick: world.tick });
     return;
   }
 

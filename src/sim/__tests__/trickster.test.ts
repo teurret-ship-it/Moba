@@ -23,21 +23,31 @@ function input(over: Partial<InputFrame> = {}): InputFrame {
 }
 
 describe('Zwód', () => {
-  it('staje tam, gdzie stoisz, i znika po czasie', () => {
+  it('leci przed siebie i znika po czasie', () => {
     const s = trickster();
     const p = s.world.players[0]!;
     p.x = 5;
     p.y = -3;
+    p.facing = 0;
 
     s.pushInput(0, input({ seq: 1, stealth: true }));
     s.step();
 
     expect(s.world.decoys).toHaveLength(1);
     const d = s.world.decoys[0]!;
-    // Postawienie kopii jest zobowiązaniem: zdradza miejsce, w którym byłeś.
-    expect(d.x).toBeCloseTo(5, 3);
-    expect(d.y).toBeCloseTo(-3, 3);
+    // Kopia ląduje przed właścicielem, w stronę, w którą patrzy. Wcześniej
+    // stawała pod jego nogami i wtedy zamiana z nią nie zmieniała niczego —
+    // patrz komentarz przy `throwDistance`.
+    // Tolerancja, bo kopia jest jeszcze wypychana z przeszkód — w murze
+    // byłaby nie do trafienia, a zamiana z nią wsadzałaby właściciela w mur.
+    expect(d.x).toBeGreaterThan(5);
+    const thrown = Math.hypot(d.x - 5, d.y + 3);
+    expect(thrown).toBeGreaterThan(TRICK_ABILITY.zwod.throwDistance - 1.5);
+    expect(thrown).toBeLessThan(TRICK_ABILITY.zwod.throwDistance + 1.5);
     expect(d.ownerId).toBe(p.id);
+    // Zobowiązanie zostaje: kopia jest nieruchomym punktem, który zdradza,
+    // gdzie zamierzasz być.
+    expect(Math.hypot(d.x - p.x, d.y - p.y)).toBeGreaterThan(3);
 
     for (let i = 0; i < TRICK_ABILITY.zwod.durationTicks + 2; i++) s.step();
     expect(s.world.decoys).toHaveLength(0);
@@ -112,8 +122,11 @@ describe('Zamiana', () => {
     const p = s.world.players[0]!;
 
     p.x = 0; p.y = 0;
+    p.facing = 0;
     s.pushInput(0, input({ seq: 1, stealth: true }));
     s.step();
+    const decoyX = s.world.decoys[0]!.x;
+    const decoyY = s.world.decoys[0]!.y;
 
     // Odejdź od kopii, potem zamień się z nią.
     p.x = 20; p.y = 8;
@@ -124,7 +137,7 @@ describe('Zamiana', () => {
     s.step();
 
     // Właściciel wylądował na miejscu kopii...
-    expect(Math.hypot(p.x - 0, p.y - 0)).toBeLessThan(1.5);
+    expect(Math.hypot(p.x - decoyX, p.y - decoyY)).toBeLessThan(1.5);
     // ...a kopia przejęła jego miejsce. Bez tego przeciwnik bijący w Zwód
     // od razu wie, że został oszukany.
     const d = s.world.decoys[0]!;
@@ -149,12 +162,13 @@ describe('Zamiana', () => {
     const s = trickster(7);
     const p = s.world.players[0]!;
     p.x = 9; p.y = 2;
+    p.facing = 0;
     s.pushInput(0, input({ seq: 1, stealth: true }));
     s.step();
 
     const snap = buildSnapshot(s.world, p.id);
     expect(snap.self?.decoy).not.toBeNull();
-    expect(snap.self?.decoy?.x).toBeCloseTo(9, 3);
+    expect(snap.self?.decoy?.x).toBeCloseTo(9 + TRICK_ABILITY.zwod.throwDistance, 3);
     expect(snap.decoys).toHaveLength(1);
   });
 });
@@ -259,6 +273,7 @@ describe('Zwód w ścieżce klienta', () => {
     const p = s.world.players[0]!;
     p.x = 4;
     p.y = 1;
+    p.facing = 0;
 
     const buffer = new SnapshotBuffer();
     let now = 1000;
@@ -278,6 +293,6 @@ describe('Zwód w ścieżce klienta', () => {
     const state = buffer.sample(now + 200);
     expect(state).not.toBeNull();
     expect(state!.decoys).toHaveLength(1);
-    expect(state!.decoys[0]!.x).toBeCloseTo(4, 3);
+    expect(state!.decoys[0]!.x).toBeCloseTo(4 + TRICK_ABILITY.zwod.throwDistance, 3);
   });
 });

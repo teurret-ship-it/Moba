@@ -55,6 +55,14 @@
         <button id="btn-requeue" class="dead-btn" type="button">Nowa runda</button>
         <span class="dead-hint">albo dogrywaj do końca</span>
       </div>
+      <!-- Podpowiedzi TYLKO w pierwszej rundzie w życiu. Bramka Fazy 0 mierzy
+           obcych ludzi, a obcy człowiek nie czyta ekranu startowego dwa razy —
+           i nie wolno mu przy trzeciej rundzie kazać ich znowu oglądać. -->
+      <div id="first-run-hints" hidden>
+        <div class="hint hint--move">Przeciągnij kciukiem<br />po tej połowie ekranu</div>
+        <div class="hint hint--buttons">Trzy umiejętności<br />— tapnij</div>
+        <div class="hint hint--attack">Atak jest automatyczny.<br />Podejdź do przeciwnika.</div>
+      </div>
       <div id="hud-banner" hidden></div>
       <div id="hud-warmup" hidden>3</div>
       <div id="hud-hurt"></div>
@@ -134,6 +142,7 @@
           <h2 id="over-title" class="screen-title"></h2>
           <div id="over-stats" class="stats"></div>
           <div id="over-standings" class="standings"></div>
+          <div id="over-records" class="records" hidden></div>
           <button id="btn-again" class="primary-btn" type="button">Jeszcze raz</button>
         </div>
       </div>

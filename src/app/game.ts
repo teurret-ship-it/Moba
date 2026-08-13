@@ -16,6 +16,8 @@ import { Hud } from '../ui/hud.ts';
 import { Screens } from '../ui/screens.ts';
 import { Sfx } from '../audio/sfx.ts';
 import { CombatFeedback } from '../ui/feedback.ts';
+import { RecordStore } from './records.ts';
+import { TICK_HZ as SIM_HZ } from '../sim/constants.ts';
 
 /**
  * Spięcie wszystkiego w pętlę.
@@ -45,6 +47,8 @@ export class Game {
   private readonly screens: Screens;
   private readonly sfx = new Sfx();
   private readonly feedback: CombatFeedback;
+  private readonly records = new RecordStore();
+  private readonly firstRunHints: HTMLElement;
 
   private transport: LocalTransport | null = null;
   private buffer = new SnapshotBuffer();
@@ -76,6 +80,7 @@ export class Game {
     this.hud = new Hud(opts.uiRoot);
     this.screens = new Screens(opts.uiRoot);
     this.feedback = new CombatFeedback(opts.uiRoot);
+    this.firstRunHints = required(opts.uiRoot, '#first-run-hints');
     this.netProfile = NET_PROFILES[opts.netProfile ?? 'local'] ?? NET_PROFILES.local!;
     this.debugVisible = opts.debug ?? false;
     this.hud.toggleDebug(this.debugVisible);
@@ -115,6 +120,7 @@ export class Game {
     this.renderer.reset();
     this.hud.reset();
     this.feedback.reset();
+    this.firstRunHints.hidden = true;
     this.buffer.clear();
     this.predictor.reset();
     this.screens.hideAll();
@@ -148,6 +154,10 @@ export class Game {
     this.matchStartBytes = this.transport.stats.bytesReceived;
     this.worstFrameMs = 0;
     this.fpsSamples = [];
+
+    // Podpowiedzi tylko przy pierwszej rundzie w życiu — i tylko przez
+    // kilka sekund. Przy trzeciej rundzie byłyby już wyłącznie hałasem.
+    this.firstRunHints.hidden = !this.records.isFirstEver;
 
     this.accumulator = 0;
     this.lastFrame = performance.now();
@@ -400,7 +410,28 @@ export class Game {
 
     const result = transport.sim.result();
     this.sfx.play(result.winner === this.localPlayerId ? 'win' : 'death');
-    this.screens.showResult(result, this.localPlayerId, () => this.startMatch());
+
+    const me = result.standings.find((s) => s.id === this.localPlayerId);
+    const beaten = me
+      ? this.records.record({
+          place: me.place,
+          players: result.standings.length,
+          kills: me.kills,
+          damage: me.damageDealt,
+          survivedSeconds: Math.round(me.survivedTicks / SIM_HZ),
+          score: me.score,
+          level: me.level,
+          classId: this.localClass,
+          won: result.winner === this.localPlayerId,
+        })
+      : undefined;
+
+    this.screens.showResult(
+      result,
+      this.localPlayerId,
+      () => this.startMatch(),
+      beaten ? { current: this.records.current, beaten } : undefined,
+    );
   }
 
   /**

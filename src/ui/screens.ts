@@ -7,6 +7,7 @@ import {
   type ClassId,
 } from '../sim/classes.ts';
 import type { MatchResult } from '../sim/types.ts';
+import type { BeatenRecords, Records } from '../app/records.ts';
 import { PLAYER_COLORS } from '../render/textures.ts';
 
 /** Jedno zdanie na umiejętność — czytane raz, przed pierwszą rundą. */
@@ -42,6 +43,7 @@ export class Screens {
   private readonly overTitle: HTMLElement;
   private readonly overStats: HTMLElement;
   private readonly standings: HTMLElement;
+  private readonly recordsRow: HTMLElement;
 
   constructor(root: HTMLElement) {
     this.start = required(root, '#screen-start');
@@ -56,6 +58,7 @@ export class Screens {
     this.overTitle = required(root, '#over-title');
     this.overStats = required(root, '#over-stats');
     this.standings = required(root, '#over-standings');
+    this.recordsRow = required(root, '#over-records');
   }
 
   showStart(onPlay: (classId: ClassId) => void): void {
@@ -128,12 +131,72 @@ export class Screens {
     tagline.textContent = cls.tagline;
   }
 
+  /**
+   * Pas rekordów pod tabelą wyników.
+   *
+   * Dwie rzeczy naraz: co właśnie pobiłeś (świeży powód do satysfakcji)
+   * i jak blisko byłeś (powód do jeszcze jednej rundy). Drugie jest
+   * ważniejsze — „zabrakło jednego miejsca" ciągnie mocniej niż sucha
+   * statystyka.
+   */
+  private renderRecords(
+    records: { current: Readonly<Records>; beaten: BeatenRecords } | undefined,
+    place: number,
+    players: number,
+  ): void {
+    if (!records) {
+      this.recordsRow.hidden = true;
+      return;
+    }
+
+    const { current, beaten } = records;
+    // Pierwsza runda bije wszystkie rekordy naraz, bo żadnego jeszcze nie
+    // było. Cztery odznaki za samo zagranie to nie nagroda, tylko szum —
+    // i psują wagę tych prawdziwych w rundzie drugiej. Wyjątkiem jest
+    // wygrana: ta jest osiągnięciem niezależnie od historii.
+    const firstRound = current.roundsPlayed <= 1;
+    const badges: string[] = [];
+    if (beaten.firstWin) badges.push('PIERWSZA WYGRANA');
+    if (!firstRound) {
+      if (beaten.place) badges.push('NAJLEPSZE MIEJSCE');
+      if (beaten.kills) badges.push('NAJWIĘCEJ ELIMINACJI');
+      if (beaten.survival) badges.push('NAJDŁUŻSZE PRZEŻYCIE');
+      if (beaten.score) badges.push('NAJWYŻSZY WYNIK');
+    }
+
+    // „Ile zabrakło" liczymy tylko wtedy, gdy naprawdę było blisko —
+    // przy dziesiątym miejscu taka informacja jest kpiną, nie zachętą.
+    let nudge = '';
+    if (firstRound && place > 0) {
+      // Pierwszy wynik nie ma z czym się ścigać, więc dajemy mu poprzeczkę:
+      // konkretną liczbę do pobicia w następnej rundzie.
+      nudge = `Miejsce ${place} z ${players}. Do pobicia.`;
+    } else if (!beaten.place && place > 1 && place <= 3) {
+      nudge = place === 2 ? 'Zabrakło jednego miejsca.' : `Zabrakło ${place - 1} miejsc.`;
+    } else if (current.sessionStreak >= 2) {
+      nudge = `Seria: ${current.sessionStreak} rund z rzędu.`;
+    }
+
+    this.recordsRow.innerHTML =
+      badges.map((b) => `<span class="record-badge">${escapeHtml(b)}</span>`).join('') +
+      (nudge ? `<span class="record-nudge">${escapeHtml(nudge)}</span>` : '') +
+      `<span class="record-tally">rundy ${current.roundsPlayed} · wygrane ${current.wins}` +
+      (current.bestPlace < Number.MAX_SAFE_INTEGER ? ` · najlepsze ${current.bestPlace}.` : '') +
+      `</span>`;
+    this.recordsRow.hidden = false;
+  }
+
   hideAll(): void {
     this.start.hidden = true;
     this.over.hidden = true;
   }
 
-  showResult(result: MatchResult, localId: number, onAgain: () => void): void {
+  showResult(
+    result: MatchResult,
+    localId: number,
+    onAgain: () => void,
+    records?: { current: Readonly<Records>; beaten: BeatenRecords },
+  ): void {
     const me = result.standings.find((s) => s.id === localId);
     const won = result.winner === localId;
 
@@ -166,6 +229,8 @@ export class Screens {
         </div>`;
       })
       .join('');
+
+    this.renderRecords(records, me?.place ?? 0, result.standings.length);
 
     this.over.hidden = false;
     const button = this.over.querySelector<HTMLButtonElement>('#btn-again');

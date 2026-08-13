@@ -480,6 +480,56 @@ bramka w całym planie i najczęściej pomijana.
 
 ---
 
+## Wydajność — i jedna rada z poradnika, która okazała się zła
+
+Sekcja 4 planu stawia twarde budżety: **FPS ≥30 na średnim Androidzie**,
+pobranie ≤15 MB, dane ≤1,5 MB na mecz. Dwa ostatnie mierzę od pierwszej
+iteracji. Pierwszy był przez dziesięć iteracji nie do zmierzenia z kontenera
+i wciąż wymaga fizycznego telefonu — ale przynajmniej da się teraz zobaczyć,
+co go zjada: nakładka `?debug=1` pokazuje wywołania rysowania, liczbę
+trójkątów i bieżący mnożnik pikseli.
+
+**Mnożnik pikseli jest jedynym parametrem, który naprawdę tu waży.** Koszt
+wypełniania rośnie z jego kwadratem — przy DPR 3, typowym dla telefonu,
+rysujemy dziewięć razy więcej pikseli niż przy 1. Pułap zszedł z 2 na **1,5**
+na urządzeniach dotykowych, zgodnie z wytycznymi, a nad nim siedzi
+**adaptacja**: gdy klatki nie mieszczą się w 33 ms, mnożnik schodzi o ćwiartkę
+(aż do 0,75), a po dziewięciu sekundach spokoju wraca. Histereza jest celowo
+niesymetryczna — symetryczna kazałaby grze migotać rozdzielczością dokładnie
+tam, gdzie jest najciężej. W pomiarze kontrolnym (renderowanie programowe,
+czyli warunki gorsze niż jakikolwiek telefon) regulator zszedł z 1,5 na 1,25
+i utrzymał 31 FPS.
+
+### Scalanie geometrii terenu: zrobione, zmierzone, cofnięte
+
+Poradniki three.js zgodnie wymieniają scalanie geometrii jako zmianę
+o największym wpływie, a teren wyglądał na podręcznikowy przypadek:
+kilkanaście statycznych brył, dwa materiały, nic się nie rusza. Scaliłem
+i zmierzyłem:
+
+| | wywołania rysowania | trójkąty |
+|---|---|---|
+| osobne siatki | 24 | 0,7 tys. |
+| scalone | **22** | **1,4 tys.** |
+
+Dwa wywołania mniej za podwojenie przesyłanej geometrii. Powód: three.js
+odrzuca siatki poza ostrosłupem widzenia, a kamera obejmuje ułamek areny
+o promieniu 60 jednostek — osobne bryły w większości w ogóle nie są rysowane.
+Scalenie zamienia kilkanaście tanich, odrzucanych siatek w jedną, której
+odrzucić się nie da.
+
+Rada była dobra, tylko nie dla tej sceny: scalanie opłaca się, gdy wszystko
+i tak jest w kadrze. Zmiana została cofnięta, a w `arena.ts` został komentarz
+z tymi liczbami, żeby nie zrobić tego drugi raz.
+
+Przy okazji odpowiedź na pytanie, którego nie zadałem: **ta scena nie jest
+ograniczona ani liczbą wywołań rysowania, ani geometrią.** 24 wywołania przy
+mobilnej wytycznej ~50 i 0,7 tys. trójkątów to nie jest miejsce, w którym
+cokolwiek się dzieje. Cały budżet zjada wypełnianie pikseli — i dlatego
+regulowany jest właśnie on.
+
+---
+
 ## Źródła
 
 Iteracja 11 (sterowanie i odczucie) nie wyszła z mojego gustu — poniżej to,
@@ -507,3 +557,17 @@ z czego wyszła. Każda pozycja odpowiada konkretnej zmianie opisanej wyżej.
 - [Design accessible animation and movement](https://blog.pope.tech/2025/12/08/design-accessible-animation-and-movement/)
   — `prefers-reduced-motion` i zasada, że informacja niesiona przez ruch musi
   być podana także inaczej.
+
+Iteracja 12 (wydajność):
+
+- [Building Efficient Three.js Scenes — Codrops](https://tympanus.net/codrops/2025/02/11/building-efficient-three-js-scenes-optimize-performance-while-maintaining-quality/)
+  — pułap mnożnika pikseli, wykrywanie klasy urządzenia, scalanie geometrii.
+- [100 Three.js Tips That Actually Improve Performance](https://www.utsubo.com/blog/threejs-best-practices-100-tips)
+  — limit ~50 wywołań rysowania na urządzeniach mobilnych.
+- [Three.js Performance Optimisation: 60fps Patterns](https://www.intelligentgraphicandcode.com/development/threejs-interfaces/performance)
+  — instancing, atlasowanie tekstur, koszt wypełniania.
+- [How Do You Optimize Three.js Performance for Mobile Devices](https://digitalstrategyforce.com/journal/how-do-you-optimize-threejs-performance-for-mobile-devices/)
+  — wyłączanie map cieni i redukcja rozdzielczości tekstur na telefonie.
+
+Rada o scalaniu geometrii została u nas **zmierzona i odrzucona** — powody
+wyżej. Poradnik nie zna twojej sceny.

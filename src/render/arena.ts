@@ -130,6 +130,27 @@ export function createArena(): ArenaObjects {
   return {
     group,
 
+    /**
+     * Budowa terenu — osobna siatka na każdą bryłę.
+     *
+     * Wygląda to na oczywistego kandydata do scalenia geometrii: przeszkody
+     * są statyczne przez całą rundę i dzielą dwa materiały, a poradniki
+     * wydajności three.js wymieniają scalanie jako zmianę o największym
+     * wpływie. Zrobiłem to i ZMIERZYŁEM — wyszło gorzej:
+     *
+     *   przed scaleniem:  24 wywołania rysowania, 0,7 tys. trójkątów
+     *   po scaleniu:      22 wywołania rysowania, 1,4 tys. trójkątów
+     *
+     * Powód: three.js odrzuca niewidoczne siatki poza ostrosłupem widzenia,
+     * a kamera obejmuje ułamek areny o promieniu 60 jednostek. Osobne bryły
+     * są więc w większości w ogóle nierysowane. Scalenie zamienia kilkanaście
+     * TANICH, odrzucanych siatek w jedną, której odrzucić się nie da — kupuje
+     * dwa wywołania rysowania za podwojenie przesyłanej geometrii.
+     *
+     * Rada z poradnika była dobra, tylko nie dla tej sceny: scalanie opłaca
+     * się, gdy wszystko i tak jest w kadrze. Zostawiam osobne siatki i ten
+     * komentarz, żeby nie zrobić tego drugi raz.
+     */
     setTerrain(obstacles) {
       clearTerrain();
 

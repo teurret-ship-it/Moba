@@ -1,4 +1,10 @@
 import * as THREE from 'three';
+import {
+  DESKTOP_PIXEL_RATIO,
+  isProbablyMobile,
+  MOBILE_PIXEL_RATIO,
+  QualityGovernor,
+} from './quality.ts';
 import { PLAYER_RADIUS } from '../sim/constants.ts';
 import { OBJECTIVE_RADIUS } from '../sim/objective.ts';
 import type { RenderState } from '../client/interpolation.ts';
@@ -42,6 +48,7 @@ const CAMERA_DISTANCE = 25;
 /** Wygładzanie kamery: 1/s. Wyżej = sztywniej, niżej = bujanie. */
 const CAMERA_LERP = 7;
 
+
 interface PlayerVisual {
   root: THREE.Group;
   body: THREE.Sprite;
@@ -80,6 +87,10 @@ export class ArenaRenderer {
   private objectivePulse = 0;
   /** Zatrzymanie klatki po mocnym trafieniu — sekundy pozostałego bezruchu. */
   private hitStop = 0;
+  /** Regulator jakości — obniża mnożnik pikseli, gdy urządzenie nie wyrabia. */
+  private readonly quality = new QualityGovernor(
+    isProbablyMobile() ? MOBILE_PIXEL_RATIO : DESKTOP_PIXEL_RATIO,
+  );
 
   constructor(canvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({
@@ -88,9 +99,13 @@ export class ArenaRenderer {
       powerPreference: 'high-performance',
       alpha: false,
     });
-    // Sekcja 4: budżet FPS na średnim Androidzie. Pixel ratio ponad 2
-    // kosztuje ~40% wydajności i nie jest widoczne na małym ekranie.
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    // Sekcja 4: budżet FPS na średnim Androidzie.
+    //
+    // Koszt wypełniania rośnie z KWADRATEM mnożnika pikseli: przy DPR 3
+    // (typowym dla telefonu) renderujemy dziewięć razy więcej pikseli niż
+    // przy 1. Wytyczne dla urządzeń mobilnych mówią o pułapie ~1,5 i to jest
+    // punkt startowy — dalej decyduje pomiar, nie założenie.
+    this.applyPixelRatio();
     this.renderer.setClearColor(0x0b0e15, 1);
 
     this.scene.fog = new THREE.Fog(0x0b0e15, 46, 78);
@@ -169,6 +184,24 @@ export class ArenaRenderer {
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
+  }
+
+  private applyPixelRatio(): void {
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, this.quality.pixelRatioCap));
+  }
+
+  /** Adaptacja jakości do zmierzonego czasu klatki — patrz `quality.ts`. */
+  tuneQuality(frameMs: number): void {
+    if (this.quality.update(frameMs) !== null) this.applyPixelRatio();
+  }
+
+  /** Liczby do nakładki pomiarowej — wywołania rysowania i mnożnik pikseli. */
+  get budgetStats(): { calls: number; triangles: number; pixelRatio: number } {
+    return {
+      calls: this.renderer.info.render.calls,
+      triangles: this.renderer.info.render.triangles,
+      pixelRatio: this.renderer.getPixelRatio(),
+    };
   }
 
   /**

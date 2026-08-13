@@ -375,6 +375,9 @@ export class Game {
 
     const frameMs = performance.now() - frameStart;
     if (frameMs > this.worstFrameMs) this.worstFrameMs = frameMs;
+    // Adaptacja jakości karmi się rzeczywistym czasem klatki. Klasy
+    // urządzenia nie da się wykryć — da się ją tylko zmierzyć.
+    this.renderer.tuneQuality(dt);
     this.fpsSamples.push(1000 / Math.max(1, dt));
     if (this.fpsSamples.length > 60) this.fpsSamples.shift();
   };
@@ -485,8 +488,12 @@ export class Game {
     const seconds = Math.max(1, tick / TICK_HZ);
     const projectedPerMatch = (matchBytes / seconds) * 240;
 
+    const gpu = this.renderer.budgetStats;
     this.hud.setDebug([
       `fps ${avgFps.toFixed(0)}  najgorsza klatka ${this.worstFrameMs.toFixed(1)} ms`,
+      // Wywołania rysowania są jedynym budżetem wydajności, który da się
+      // odczytać bez profilera — a na telefonie wytyczne mówią o pułapie ~50.
+      `rysowanie ${gpu.calls} wywołań  ${(gpu.triangles / 1000).toFixed(1)}k trójkątów  piksele ×${gpu.pixelRatio.toFixed(2)}`,
       `tick ${tick}  snapshoty ${transport.stats.snapshotsReceived}  bufor ${this.buffer.size}`,
       `w kadrze: gracze ${this.latestSnapshot?.players.length ?? 0}  kopie ${this.latestSnapshot?.decoys.length ?? 0}  dropy ${this.latestSnapshot?.pickups.length ?? 0}`,
       `snapshot ${transport.stats.lastSnapshotBytes} B  (~${(transport.stats.lastSnapshotBytes * 15 / 1024).toFixed(1)} kB/s)`,

@@ -10,6 +10,7 @@ import {
 } from '../sim/classes.ts';
 import type { Snapshot } from '../sim/snapshot.ts';
 import type { SimEvent } from '../sim/types.ts';
+import { OFFER_DEADLINE_TICKS, UPGRADES, type UpgradeId } from '../sim/upgrades.ts';
 import { PLAYER_COLORS } from '../render/textures.ts';
 
 /**
@@ -46,10 +47,23 @@ export class Hud {
     debug: HTMLElement;
     joystick: HTMLElement;
     joystickKnob: HTMLElement;
+    xpFill: HTMLElement;
+    level: HTMLElement;
+    upgradePick: HTMLElement;
+    upgradeCards: HTMLElement;
+    upgradeLevel: HTMLElement;
+    upgradeTimer: HTMLElement;
+    deadPanel: HTMLElement;
+    deadPlace: HTMLElement;
+    requeue: HTMLButtonElement;
   };
 
   private bannerUntil = 0;
   private shownClass: ClassId | null = null;
+  /** Podpis oferty aktualnie narysowanej — żeby nie przerysowywać co klatkę. */
+  private shownOffer = '';
+  private onPick: ((index: number) => void) | null = null;
+  private onRequeue: (() => void) | null = null;
 
   constructor(root: HTMLElement) {
     this.el = {
@@ -69,6 +83,15 @@ export class Hud {
       debug: must(root, '#hud-debug'),
       joystick: must(root, '#joystick'),
       joystickKnob: must(root, '#joystick-knob'),
+      xpFill: must(root, '#hud-xp-fill'),
+      level: must(root, '#hud-level'),
+      upgradePick: must(root, '#upgrade-pick'),
+      upgradeCards: must(root, '#upgrade-cards'),
+      upgradeLevel: must(root, '#upgrade-level'),
+      upgradeTimer: must(root, '#upgrade-timer'),
+      deadPanel: must(root, '#dead-panel'),
+      deadPlace: must(root, '#dead-place'),
+      requeue: must(root, '#btn-requeue') as HTMLButtonElement,
     };
   }
 
@@ -103,6 +126,13 @@ export class Hud {
       this.el.hpShield.style.width = `${shieldFrac * 100}%`;
       this.el.hpShield.hidden = shieldFrac <= 0;
       this.el.kills.textContent = String(self.kills);
+
+      // Pasek doświadczenia i poziom.
+      this.el.xpFill.style.width = `${Math.min(100, (self.xp / Math.max(1, self.xpForNext)) * 100)}%`;
+      this.el.level.textContent = String(self.level);
+
+      this.syncOffer(self.offer, self.level, self.offerDeadlineTick, snapshot.tick, self.upgrades);
+      this.syncDead(self.alive, snapshot.aliveCount);
 
       this.setCooldown(this.el.cdDash, self.cdMove, snapshot.tick, MOVE_ABILITY[cls.move].cooldownTicks);
       this.setCooldown(this.el.cdStealth, self.cdTrick, snapshot.tick, TRICK_ABILITY[cls.trick].cooldownTicks);
@@ -148,12 +178,95 @@ export class Hud {
         case 'supplyWarn':
           this.banner('Zrzut zaopatrzenia', 2500, now);
           break;
+        case 'upgradePicked':
+          if (e.player === selfId) this.banner(UPGRADES[e.upgrade].name, 1600, now);
+          break;
+        case 'revive':
+          if (e.player === selfId) this.banner('Drugie życie', 2200, now);
+          break;
         case 'matchOver':
           break;
         default:
           break;
       }
     }
+  }
+
+  /** Podpięcie akcji gracza spoza gałki i przycisków akcji. */
+  bindActions(onPick: (index: number) => void, onRequeue: () => void): void {
+    this.onPick = onPick;
+    this.onRequeue = onRequeue;
+    this.el.requeue.onclick = () => this.onRequeue?.();
+  }
+
+  /**
+   * Karty ulepszeń.
+   *
+   * Rysowane tylko przy zmianie oferty — przy 60 klatkach na sekundę
+   * przebudowa DOM co klatkę kosztowałaby więcej niż cała reszta HUD-u.
+   */
+  private syncOffer(
+    offer: readonly UpgradeId[],
+    level: number,
+    deadlineTick: number,
+    tick: number,
+    owned: readonly UpgradeId[],
+  ): void {
+    if (offer.length === 0) {
+      if (this.shownOffer !== '') {
+        this.shownOffer = '';
+        this.el.upgradePick.hidden = true;
+        this.el.upgradeCards.innerHTML = '';
+      }
+      return;
+    }
+
+    const signature = offer.join(',');
+    if (signature !== this.shownOffer) {
+      this.shownOffer = signature;
+      this.el.upgradeLevel.textContent = `Poziom ${level}`;
+      this.el.upgradeCards.innerHTML = '';
+
+      offer.forEach((id, index) => {
+        const def = UPGRADES[id];
+        const stacks = owned.reduce((n, u) => (u === id ? n + 1 : n), 0);
+        const card = document.createElement('button');
+        card.type = 'button';
+        card.className = 'upgrade-card';
+        card.innerHTML =
+          `<span class="upgrade-glyph">${def.glyph}</span>` +
+          `<span class="upgrade-name">${escapeHtml(def.name)}</span>` +
+          `<span class="upgrade-text">${escapeHtml(def.text)}</span>` +
+          (stacks > 0 ? `<span class="upgrade-stack">masz ${stacks}×</span>` : '');
+        card.onclick = () => this.onPick?.(index);
+        this.el.upgradeCards.appendChild(card);
+      });
+
+      this.el.upgradePick.hidden = false;
+    }
+
+    // Odliczanie: po nim wybór rozstrzyga się sam, więc gracz musi je widzieć.
+    const left = Math.max(0, deadlineTick - tick);
+    this.el.upgradeTimer.textContent = `${Math.ceil(left / TICK_HZ)} s`;
+    void OFFER_DEADLINE_TICKS;
+  }
+
+  /**
+   * Panel po śmierci.
+   *
+   * Sekcja 14, bramka Fazy 0: liczy się chęć zagrania JESZCZE RAZ. Gracz
+   * wyeliminowany w połowie rundy nie może być skazany na oglądanie cudzej
+   * końcówki — dostaje wyjście od razu, ale nie jest do niego zmuszany.
+   */
+  private syncDead(alive: boolean, aliveCount: number): void {
+    if (alive) {
+      if (!this.el.deadPanel.hidden) this.el.deadPanel.hidden = true;
+      return;
+    }
+    if (this.el.deadPanel.hidden) {
+      this.el.deadPanel.hidden = false;
+    }
+    this.el.deadPlace.textContent = `zostało ${aliveCount} graczy`;
   }
 
   /** Podmiana nazw i symboli na przyciskach zgodnie z klasą. */
@@ -247,6 +360,10 @@ export class Hud {
   reset(): void {
     for (const entry of this.killFeed) entry.el.remove();
     this.killFeed = [];
+    this.shownOffer = '';
+    this.el.upgradePick.hidden = true;
+    this.el.upgradeCards.innerHTML = '';
+    this.el.deadPanel.hidden = true;
     this.el.banner.hidden = true;
     this.el.warmup.hidden = true;
   }

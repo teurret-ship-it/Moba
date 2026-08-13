@@ -6,6 +6,7 @@ import {
   ZONE_START_RADIUS,
 } from './constants.ts';
 import { getClass, CLASS_IDS, type ClassId } from './classes.ts';
+import { baseStats } from './upgrades.ts';
 import { Rng } from './rng.ts';
 import type { PlayerState, World } from './types.ts';
 
@@ -154,6 +155,14 @@ export function createPlayer(a: CreatePlayerArgs): PlayerState {
     speedBuffEndTick: -1,
     damageBuffEndTick: -1,
 
+    xp: 0,
+    level: 1,
+    upgrades: [],
+    offer: [],
+    offerDeadlineTick: -1,
+    stats: baseStats(a.classId),
+    impetusEndTick: -1,
+
     kills: 0,
     damageDealt: 0,
     score: 0,
@@ -180,5 +189,11 @@ export function isStealthed(p: PlayerState, tick: number): boolean {
 /** Głęboka kopia stanu gracza — używana przez predykcję klienta. */
 export function clonePlayer(p: PlayerState): PlayerState {
   const { ai: _ai, ...rest } = p;
-  return { ...rest, dashHits: [...p.dashHits] };
+  return {
+    ...rest,
+    dashHits: [...p.dashHits],
+    upgrades: [...p.upgrades],
+    offer: [...p.offer],
+    stats: { ...p.stats },
+  };
 }

@@ -33,6 +33,28 @@ export function applyMovement(p: PlayerState, input: InputFrame, tick: number): 
     p.vx = p.dashDirX * move.speed;
     p.vy = p.dashDirY * move.speed;
   } else {
+    const speed = p.stats.speed * speedMultiplier(p, tick);
+
+    // Koniec ruchu ze slotu RUCH: ucinamy nadmiarowy pęd.
+    //
+    // Bez tego prędkość skoku zostaje w postaci i wygasa dopiero przez
+    // hamowanie (ACCEL). Dla Skoku (42) to ułamek sekundy, ale Mgnienie ma
+    // prędkość 210 — postać leciała jeszcze ~3 s po teleporcie i wynosiło ją
+    // średnio 7,5 jednostki poza kurczący się krąg. Zmierzone: 74 śmierci
+    // Widma od strefy na 40 rund wobec 3 u Kolosa, w 63 przypadkach w trybie
+    // „wracam do strefy" — postać wiedziała, że jest poza, i nie potrafiła
+    // zawrócić, bo wciąż leciała.
+    //
+    // Slot RUCH ma być przemieszczeniem, nie darmowym pędem.
+    if (tick === p.dashEndTick) {
+      const carried = Math.hypot(p.vx, p.vy);
+      if (carried > speed) {
+        const s = speed / carried;
+        p.vx *= s;
+        p.vy *= s;
+      }
+    }
+
     let mx = input.moveX;
     let my = input.moveY;
     const len = Math.hypot(mx, my);
@@ -41,7 +63,6 @@ export function applyMovement(p: PlayerState, input: InputFrame, tick: number): 
       my /= len;
     }
 
-    const speed = cls.speed * speedMultiplier(p, tick);
     const targetVx = mx * speed;
     const targetVy = my * speed;
 
@@ -64,6 +85,8 @@ export function speedMultiplier(p: PlayerState, tick: number): number {
   let mul = 1;
   if (tick < p.stealthEndTick) mul *= STEALTH_SPEED_MUL;
   if (tick < p.speedBuffEndTick) mul *= PICKUP_SPEED_MUL;
+  // Impet — ulepszenie: przyspieszenie tuż po użyciu slotu RUCH.
+  if (tick < p.impetusEndTick) mul *= p.stats.impetusMul;
   return mul;
 }
 
@@ -118,8 +141,11 @@ export function tryStartMove(p: PlayerState, input: InputFrame, tick: number): b
   p.dashDirY = dy;
   p.facing = Math.atan2(dy, dx);
   p.dashEndTick = tick + move.durationTicks;
-  p.cdMove = tick + move.cooldownTicks;
+  p.cdMove = tick + Math.round(move.cooldownTicks * p.stats.cooldownMul);
   p.dashHits.length = 0;
+  if (p.stats.impetusTicks > 0) {
+    p.impetusEndTick = tick + move.durationTicks + p.stats.impetusTicks;
+  }
   return true;
 }
 

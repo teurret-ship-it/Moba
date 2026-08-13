@@ -43,6 +43,7 @@ export interface ClassDef {
   move: MoveAbility;
   trick: TrickAbility;
   power: PowerAbility;
+
 }
 
 export const ABILITY_NAMES: Record<MoveAbility | TrickAbility | PowerAbility, string> = {

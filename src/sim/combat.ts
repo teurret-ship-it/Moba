@@ -13,6 +13,8 @@ import {
   POWER_ABILITY,
   TRICK_ABILITY,
 } from './classes.ts';
+import { computeStats, XP_PER_DAMAGE, XP_PER_KILL } from './upgrades.ts';
+import { grantXp } from './progression.ts';
 import type { InputFrame, PlayerState, World } from './types.ts';
 import { isStealthed } from './world.ts';
 
@@ -22,7 +24,10 @@ import { isStealthed } from './world.ts';
  */
 
 export function damageMultiplier(p: PlayerState, tick: number): number {
-  return tick < p.damageBuffEndTick ? PICKUP_DAMAGE_MUL : 1;
+  let mul = tick < p.damageBuffEndTick ? PICKUP_DAMAGE_MUL : 1;
+  // Furia — ulepszenie: im bliżej śmierci, tym mocniejszy cios.
+  if (p.hp / p.stats.maxHp < p.stats.furyThreshold) mul *= p.stats.furyMul;
+  return mul;
 }
 
 /**
@@ -34,7 +39,7 @@ export function damageMultiplier(p: PlayerState, tick: number): number {
 export function findAttackTarget(
   world: World,
   attacker: PlayerState,
-  range = getClass(attacker.classId).attackRange,
+  range = attacker.stats.attackRange,
 ): PlayerState | null {
   let best: PlayerState | null = null;
   let bestDist = range;
@@ -67,14 +72,13 @@ export function stepAutoAttacks(world: World): void {
     // w wybranym momencie, a nie dlatego, że wróg wszedł w zasięg.
     if (isStealthed(p, world.tick)) continue;
 
-    const cls = getClass(p.classId);
     const target = findAttackTarget(world, p);
     if (!target) continue;
 
-    p.cdAttack = world.tick + cls.attackCooldownTicks;
+    p.cdAttack = world.tick + p.stats.attackCooldownTicks;
     p.facing = Math.atan2(target.y - p.y, target.x - p.x);
 
-    applyDamage(world, target, cls.attackDamage * damageMultiplier(p, world.tick), p.id);
+    applyDamage(world, target, p.stats.attackDamage * damageMultiplier(p, world.tick), p.id);
   }
 }
 
@@ -90,7 +94,7 @@ export function tryStartTrick(world: World, p: PlayerState, input: InputFrame): 
     if (isStealthed(p, world.tick)) return;
     const def = TRICK_ABILITY.cien;
     p.stealthEndTick = world.tick + def.durationTicks;
-    p.cdTrick = world.tick + def.cooldownTicks;
+    p.cdTrick = world.tick + Math.round(def.cooldownTicks * p.stats.cooldownMul);
     // Wejście w ukrycie uzbraja zasadzkę — pierwszy cios po wyjściu
     // liczy się podwójnie dla Rozdarcia.
     p.ambushReady = true;
@@ -103,7 +107,7 @@ export function tryStartTrick(world: World, p: PlayerState, input: InputFrame): 
   if (p.shieldHp > 0 && world.tick < p.shieldEndTick) return;
   p.shieldHp = def.absorb;
   p.shieldEndTick = world.tick + def.durationTicks;
-  p.cdTrick = world.tick + def.cooldownTicks;
+  p.cdTrick = world.tick + Math.round(def.cooldownTicks * p.stats.cooldownMul);
   world.events.push({ type: 'shieldUp', player: p.id, x: p.x, y: p.y, tick: world.tick });
 }
 
@@ -133,7 +137,7 @@ export function tryStartPower(world: World, p: PlayerState, input: InputFrame): 
     p.salvoLeft = def.shots;
     p.salvoNextTick = world.tick;
     p.salvoTargetId = target.id;
-    p.cdPower = world.tick + def.cooldownTicks;
+    p.cdPower = world.tick + Math.round(def.cooldownTicks * p.stats.cooldownMul);
     return;
   }
 
@@ -143,7 +147,7 @@ export function tryStartPower(world: World, p: PlayerState, input: InputFrame): 
     power === 'fala' ? POWER_ABILITY.fala.cooldownTicks : POWER_ABILITY.rozdarcie.cooldownTicks;
 
   p.powerFireTick = world.tick + windup;
-  p.cdPower = world.tick + cooldown;
+  p.cdPower = world.tick + Math.round(cooldown * p.stats.cooldownMul);
 }
 
 /** Detonacja mocy, których windup już minął, oraz kolejne strzały Salwy. */
@@ -334,9 +338,10 @@ function angleDiff(a: number, b: number): number {
  */
 export function stepRegen(world: World): void {
   for (const p of world.players) {
-    if (!p.alive || p.hp >= p.maxHp) continue;
+    if (!p.alive || p.hp >= p.stats.maxHp) continue;
     if (p.lastHitTick >= 0 && world.tick - p.lastHitTick < REGEN_DELAY_TICKS) continue;
-    p.hp = Math.min(p.maxHp, p.hp + REGEN_PER_SECOND * DT);
+    const rate = REGEN_PER_SECOND + p.stats.regenPerSecond;
+    p.hp = Math.min(p.stats.maxHp, p.hp + rate * DT);
   }
 }
 
@@ -376,7 +381,14 @@ export function applyDamage(
 
   if (sourceId >= 0) {
     const src = world.players[sourceId];
-    if (src) src.damageDealt += landed;
+    if (src) {
+      src.damageDealt += landed;
+      grantXp(world, src.id, landed * XP_PER_DAMAGE);
+      // Wampiryzm — ulepszenie: część zadanych obrażeń wraca jako zdrowie.
+      if (src.stats.lifesteal > 0 && src.alive) {
+        src.hp = Math.min(src.stats.maxHp, src.hp + landed * src.stats.lifesteal);
+      }
+    }
   }
 
   world.events.push({
@@ -395,6 +407,23 @@ export function applyDamage(
 }
 
 export function killPlayer(world: World, victim: PlayerState, killerId: number): void {
+  // Drugie życie — ulepszenie: jednorazowe wskrzeszenie zamiast śmierci.
+  // Zużywa ładunek przez usunięcie ulepszenia z listy, więc przelicza się
+  // razem z resztą statystyk i nie da się go „odzyskać".
+  if (victim.stats.extraLives > 0) {
+    const idx = victim.upgrades.indexOf('drugie_zycie');
+    if (idx >= 0) {
+      victim.upgrades.splice(idx, 1);
+      victim.stats = computeStats(victim.classId, victim.upgrades);
+      victim.maxHp = victim.stats.maxHp;
+      victim.hp = victim.stats.maxHp * 0.3;
+      victim.lastHitTick = world.tick;
+      victim.shieldHp = 0;
+      world.events.push({ type: 'revive', player: victim.id, x: victim.x, y: victim.y, tick: world.tick });
+      return;
+    }
+  }
+
   victim.hp = 0;
   victim.alive = false;
   victim.deathTick = world.tick;
@@ -410,6 +439,7 @@ export function killPlayer(world: World, victim: PlayerState, killerId: number):
   if (killer) {
     killer.kills += 1;
     killer.score += SCORE_PER_KILL;
+    grantXp(world, killer.id, XP_PER_KILL);
   }
 
   world.events.push({

@@ -83,6 +83,11 @@ export class Game {
     document.addEventListener('visibilitychange', this.onVisibilityChange);
     window.addEventListener('keydown', this.onKeyDown);
 
+    this.hud.bindActions(
+      (index) => this.controls.choose(index),
+      () => this.startMatch(),
+    );
+
     this.screens.showStart((classId) => this.startMatch(undefined, classId));
   }
 
@@ -159,6 +164,16 @@ export class Game {
         case 'shieldUp':
           this.renderer.fx.shield(e.x, e.y, true);
           break;
+        case 'levelUp': {
+          const me = snapshot.players.find((p) => p.id === e.player);
+          if (me) this.renderer.fx.levelUp(me.x, me.y);
+          break;
+        }
+        case 'revive': {
+          this.renderer.fx.death(e.x, e.y, this.colors.get(e.player) ?? 0);
+          if (e.player === this.localPlayerId) this.renderer.shake(0.5);
+          break;
+        }
         case 'shieldBreak':
           this.renderer.fx.shield(e.x, e.y, false);
           if (e.player === this.localPlayerId) this.renderer.shake(0.3);

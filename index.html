@@ -36,12 +36,31 @@
       </div>
 
       <div id="hud-killfeed"></div>
+
+      <!-- Karty ulepszeń. Gra się NIE zatrzymuje — runda leci dalej, a po
+           upływie czasu wybór rozstrzyga się sam. -->
+      <div id="upgrade-pick" hidden>
+        <div class="upgrade-head">
+          <span id="upgrade-level">Poziom 2</span>
+          <span id="upgrade-timer" class="upgrade-timer"></span>
+        </div>
+        <div id="upgrade-cards"></div>
+      </div>
+
+      <!-- Po śmierci: nie zmuszamy do oglądania końcówki. -->
+      <div id="dead-panel" hidden>
+        <span class="dead-title">Wyeliminowany</span>
+        <span id="dead-place" class="dead-place"></span>
+        <button id="btn-requeue" class="dead-btn" type="button">Nowa runda</button>
+        <span class="dead-hint">albo dogrywaj do końca</span>
+      </div>
       <div id="hud-banner" hidden></div>
       <div id="hud-warmup" hidden>3</div>
       <div id="hud-hurt"></div>
       <pre id="hud-debug" hidden></pre>
 
       <div id="hud-bottom">
+        <div id="hud-xp"><div id="hud-xp-fill"></div><span id="hud-level">1</span></div>
         <div id="hud-hp">
           <div id="hud-hp-fill" data-level="ok"></div>
           <div id="hud-hp-shield" hidden></div>

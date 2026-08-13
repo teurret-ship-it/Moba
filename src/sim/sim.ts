@@ -18,6 +18,7 @@ import {
 import { computeBotInput, createBrain } from './bots.ts';
 import { applyMovement, resolveOverlaps, tryStartMove } from './movement.ts';
 import { stepPickups } from './pickups.ts';
+import { botPick, pickUpgrade, stepProgression, stepSurvivalXp } from './progression.ts';
 import { Rng } from './rng.ts';
 import type { InputFrame, MatchResult, PlayerState, World } from './types.ts';
 import { emptyInput } from './types.ts';
@@ -64,6 +65,7 @@ export class Simulation {
       current.dash ||= input.dash;
       current.stealth ||= input.stealth;
       current.burst ||= input.burst;
+      if (input.pick >= 0) current.pick = input.pick;
       return;
     }
 
@@ -94,7 +96,10 @@ export class Simulation {
     for (const p of w.players) {
       if (!p.alive) continue;
       if (p.isBot) {
-        frames.set(p.id, computeBotInput(w, p, this.rng));
+        const frame = computeBotInput(w, p, this.rng);
+        // Bot wybiera kartę od razu — nie ma powodu, żeby zwlekał.
+        if (p.offer.length > 0) frame.pick = botPick(p, this.rng);
+        frames.set(p.id, frame);
       } else {
         const input = this.inputs.get(p.id) ?? emptyInput();
         frames.set(p.id, input);
@@ -112,6 +117,7 @@ export class Simulation {
       }
       tryStartTrick(w, p, input);
       tryStartPower(w, p, input);
+      if (input.pick >= 0) pickUpgrade(w, p, input.pick);
     }
 
     // 3. Ruch.
@@ -146,12 +152,16 @@ export class Simulation {
     //    licznik jeszcze w tym samym ticku.
     stepRegen(w);
 
-    // 9. Punkty za przetrwanie — naliczane co sekundę, nie co tick.
+    // 9. Punkty i doświadczenie za przetrwanie — co sekundę, nie co tick.
     if (w.tick % TICK_HZ === 0) {
       for (const p of w.players) {
         if (p.alive) p.score += SCORE_PER_SECOND_ALIVE;
       }
     }
+    stepSurvivalXp(w);
+
+    // 9b. Awanse i wygasające oferty ulepszeń.
+    stepProgression(w, this.rng);
 
     // 10. Warunek zwycięstwa.
     this.checkMatchEnd();
@@ -159,7 +169,7 @@ export class Simulation {
     // Zwolnij zużyte wejścia krawędziowe, żeby jedno tapnięcie
     // nie aktywowało umiejętności w kolejnych tickach.
     for (const [id, input] of this.inputs) {
-      this.inputs.set(id, { ...input, dash: false, stealth: false, burst: false });
+      this.inputs.set(id, { ...input, dash: false, stealth: false, burst: false, pick: -1 });
     }
   }
 
@@ -225,6 +235,8 @@ export class Simulation {
         damageDealt: Math.round(p.damageDealt),
         score: p.score,
         survivedTicks: p.alive ? w.tick : p.deathTick,
+        level: p.level,
+        upgrades: [...p.upgrades],
       })),
     };
   }

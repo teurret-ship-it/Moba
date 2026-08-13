@@ -7,6 +7,7 @@
  */
 
 import type { ClassId } from './classes.ts';
+import type { EffectiveStats, UpgradeId } from './upgrades.ts';
 
 export type PlayerId = number;
 
@@ -21,10 +22,16 @@ export interface InputFrame {
   dash: boolean;
   stealth: boolean;
   burst: boolean;
+  /**
+   * Wybór karty ulepszenia: indeks 0..2, albo -1 gdy gracz nic nie wybrał.
+   * Klient przysyła NUMER KARTY, nigdy efektu — serwer waliduje go wobec
+   * oferty, którą sam wystawił (sekcja 3: zasada zaufania).
+   */
+  pick: number;
 }
 
 export function emptyInput(seq = 0): InputFrame {
-  return { seq, moveX: 0, moveY: 0, dash: false, stealth: false, burst: false };
+  return { seq, moveX: 0, moveY: 0, dash: false, stealth: false, burst: false, pick: -1 };
 }
 
 export type AbilityKey = 'dash' | 'stealth' | 'burst';
@@ -88,6 +95,18 @@ export interface PlayerState {
   // Buffy z dropów
   speedBuffEndTick: number;
   damageBuffEndTick: number;
+
+  // Progresja w trakcie rundy.
+  xp: number;
+  level: number;
+  upgrades: UpgradeId[];
+  /** Wystawione karty. Pusta tablica = nie ma czego wybierać. */
+  offer: UpgradeId[];
+  offerDeadlineTick: number;
+  /** Przeliczone z klasy i ulepszeń — nie licz tego co tick. */
+  stats: EffectiveStats;
+  /** Do kiedy działa Impet (przyspieszenie po użyciu slotu RUCH). */
+  impetusEndTick: number;
 
   kills: number;
   damageDealt: number;
@@ -154,6 +173,9 @@ export type SimEvent =
   | { type: 'supplyWarn'; x: number; y: number; tick: number }
   | { type: 'supplyDrop'; x: number; y: number; tick: number }
   | { type: 'zoneShrink'; radius: number; tick: number }
+  | { type: 'levelUp'; player: PlayerId; level: number; tick: number }
+  | { type: 'upgradePicked'; player: PlayerId; upgrade: UpgradeId; tick: number }
+  | { type: 'revive'; player: PlayerId; x: number; y: number; tick: number }
   | { type: 'matchOver'; winner: PlayerId; tick: number };
 
 export interface World {
@@ -189,5 +211,7 @@ export interface MatchResult {
     damageDealt: number;
     score: number;
     survivedTicks: number;
+    level: number;
+    upgrades: UpgradeId[];
   }>;
 }

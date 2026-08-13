@@ -71,6 +71,7 @@ export function computeBotInput(world: World, bot: PlayerState, rng: Rng): Input
     dash: false,
     stealth: false,
     burst: false,
+    pick: -1,
   };
   if (!brain || !bot.alive) return input;
 
@@ -246,13 +247,33 @@ function findThreat(
     // Bliżej = lepiej, ranny = lepiej. Wagi zależne od skilla:
     // dobry bot dobija rannych, słaby idzie po najbliższym.
     const woundedBonus = (1 - other.hp / other.maxHp) * 30 * brain.skill;
-    const score = -d + woundedBonus + (other.id === brain.targetId ? 6 : 0);
+
+    // Kara za tłok: cel, który ma już dwóch napastników, jest mniej
+    // atrakcyjny. Bez tego pół lobby zbiegało się na jedną ofiarę i ta
+    // ginęła w sekundy niezależnie od tempa rampy agresji — wczesna faza
+    // rundy wyglądała jak egzekucja, a nie jak potyczki.
+    // Gracze też tak nie grają: darmowy dobitek owszem, ale trzeci
+    // w kolejce do tego samego celu szuka sobie innego.
+    const crowd = countAttackers(world, other.id, bot.id);
+    const crowdPenalty = crowd >= 2 ? 22 * (crowd - 1) : 0;
+
+    const score = -d + woundedBonus - crowdPenalty + (other.id === brain.targetId ? 6 : 0);
     if (score > bestScore) {
       bestScore = score;
       best = other;
     }
   }
   return best;
+}
+
+/** Ilu innych botów poluje w tej chwili na wskazany cel. */
+function countAttackers(world: World, targetId: number, exceptId: number): number {
+  let n = 0;
+  for (const p of world.players) {
+    if (!p.alive || p.id === exceptId) continue;
+    if (p.ai && p.ai.mood === 'hunt' && p.ai.targetId === targetId) n++;
+  }
+  return n;
 }
 
 function nearestPickup(
@@ -373,11 +394,24 @@ function chooseAbilities(
   }
 }
 
+/**
+ * Ograniczenie celu do wnętrza strefy — z zapasem, nie do samej krawędzi.
+ *
+ * Zmierzone: bot uciekający przed przeciwnikiem biegł dokładnie na skraj
+ * kręgu, a kurczenie strefy zastawało go tam i zabijało. Najbardziej
+ * dotykało to klasy, która ucieka najczęściej (Widmo: 65 śmierci od strefy
+ * na 40 rund wobec 1 u Kolosa), przez co wyglądało na problem balansu klas,
+ * a było zwykłym błędem nawigacji.
+ *
+ * Zapas jest procentowy, nie stały: pod koniec rundy krąg ma promień 7,
+ * więc „minus 2,5" zostawiało margines, który znikał przy pierwszym
+ * zacieśnieniu.
+ */
 function pullIntoZone(world: World, x: number, y: number): { x: number; y: number } {
   const dx = x - world.zone.x;
   const dy = y - world.zone.y;
   const d = Math.hypot(dx, dy);
-  const limit = Math.max(2, world.zone.radius - 2.5);
+  const limit = Math.max(2, Math.min(world.zone.radius - 2.5, world.zone.radius * 0.8));
   if (d <= limit) return { x, y };
   const s = limit / d;
   return { x: world.zone.x + dx * s, y: world.zone.y + dy * s };

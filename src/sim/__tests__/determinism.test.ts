@@ -63,6 +63,7 @@ describe('determinizm', () => {
       dash: tick % 137 === 0,
       stealth: tick % 311 === 0,
       burst: tick % 223 === 0,
+      pick: -1,
     });
     const a = runMatch(999, 900, script);
     const b = runMatch(999, 900, script);

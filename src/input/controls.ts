@@ -41,6 +41,8 @@ export class Controls {
   private pendingDash = false;
   private pendingStealth = false;
   private pendingBurst = false;
+  /** Wybrana karta ulepszenia (indeks) albo -1. */
+  private pendingPick = -1;
 
   private seq = 0;
   private joystickPointerId: number | null = null;
@@ -78,12 +80,20 @@ export class Controls {
       dash: this.pendingDash,
       stealth: this.pendingStealth,
       burst: this.pendingBurst,
+      pick: this.pendingPick,
     };
 
     this.pendingDash = false;
     this.pendingStealth = false;
     this.pendingBurst = false;
+    this.pendingPick = -1;
     return frame;
+  }
+
+  /** Zgłoszenie wyboru karty ulepszenia — wywoływane przez warstwę UI. */
+  choose(index: number): void {
+    this.pendingPick = index;
+    navigator.vibrate?.(14);
   }
 
   /** Zerowanie po utracie fokusu — inaczej postać biegnie w tle. */
@@ -96,6 +106,7 @@ export class Controls {
     this.pendingDash = false;
     this.pendingStealth = false;
     this.pendingBurst = false;
+    this.pendingPick = -1;
   }
 
   dispose(): void {

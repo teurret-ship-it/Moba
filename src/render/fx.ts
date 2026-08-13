@@ -237,6 +237,20 @@ export class FxSystem {
     });
   }
 
+  /** Awans: pierścień w górę spod nóg — czytelny kątem oka w walce. */
+  levelUp(x: number, y: number): void {
+    this.emit({
+      x, y, height: 0.3,
+      color: 0x9fe6ff,
+      startScale: 1.2,
+      endScale: 5.0,
+      life: 0.55,
+      opacity: 0.85,
+      map: getRingTexture(),
+      rise: 3.2,
+    });
+  }
+
   supplyMarker(x: number, y: number): void {
     this.emit({
       x, y, height: 0.3,

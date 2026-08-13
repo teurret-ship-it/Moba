@@ -1,5 +1,6 @@
 import { AOI_RADIUS, SNAPSHOT_HZ, TICK_HZ } from './constants.ts';
 import type { ClassId } from './classes.ts';
+import type { UpgradeId } from './upgrades.ts';
 import type {
   MatchPhase,
   Pickup,
@@ -10,6 +11,7 @@ import type {
   ZoneState,
 } from './types.ts';
 import { isStealthed } from './world.ts';
+import { xpForLevel } from './upgrades.ts';
 
 /**
  * Snapshot — jedyna rzecz, którą klient dostaje o świecie.
@@ -40,8 +42,10 @@ export interface PlayerView {
   classId: ClassId;
   name: string;
   isBot: boolean;
-  /** Z klasy — pasek HP musi wiedzieć, że Kolos ma 150, a Widmo 82. */
+  /** Z klasy i ulepszeń — pasek HP musi znać rzeczywiste maksimum. */
   maxHp: number;
+  /** Poziom przeciwnika — sygnał „ten urósł, uważaj". */
+  level: number;
   /** Ile jeszcze pochłonie tarcza (0 = brak). Widoczne dla wszystkich. */
   shieldHp: number;
   dashing: boolean;
@@ -74,6 +78,18 @@ export interface SelfView {
   classId: ClassId;
   maxHp: number;
   shieldHp: number;
+  /**
+   * Wzięte ulepszenia. Klient przelicza z nich te same statystyki co serwer,
+   * bo predykcja ruchu zależy od prędkości, a ta zależy od ulepszeń.
+   */
+  upgrades: UpgradeId[];
+  impetusEndTick: number;
+  level: number;
+  xp: number;
+  xpForNext: number;
+  /** Wystawione karty i termin — HUD pokazuje je do wyboru. */
+  offer: UpgradeId[];
+  offerDeadlineTick: number;
   x: number;
   y: number;
   vx: number;
@@ -163,7 +179,8 @@ function toView(p: PlayerState, tick: number, isSelf: boolean): PlayerView {
     classId: p.classId,
     name: p.name,
     isBot: p.isBot,
-    maxHp: p.maxHp,
+    maxHp: p.stats.maxHp,
+    level: p.level,
     shieldHp: tick < p.shieldEndTick ? p.shieldHp : 0,
     dashing: tick < p.dashEndTick,
     stealthed: isSelf && tick < p.stealthEndTick,
@@ -177,8 +194,15 @@ function toSelfView(p: PlayerState): SelfView {
   return {
     id: p.id,
     classId: p.classId,
-    maxHp: p.maxHp,
+    maxHp: p.stats.maxHp,
     shieldHp: p.shieldEndTick > 0 ? p.shieldHp : 0,
+    upgrades: [...p.upgrades],
+    impetusEndTick: p.impetusEndTick,
+    level: p.level,
+    xp: p.xp,
+    xpForNext: xpForLevel(p.level),
+    offer: [...p.offer],
+    offerDeadlineTick: p.offerDeadlineTick,
     x: p.x,
     y: p.y,
     vx: p.vx,
@@ -221,6 +245,12 @@ function filterEvents(
       case 'supplyDrop':
         out.push(e);
         break;
+      case 'levelUp':
+      case 'upgradePicked':
+        // Progresja dotyczy tylko odbiorcy — cudze awanse nie są jego sprawą
+        // i wysyłanie ich zdradzałoby, kto rośnie i gdzie.
+        if (e.player === viewerId) out.push(e);
+        break;
       case 'kill':
         // Killfeed jest globalny — to jest informacja o stanie rundy,
         // a nie o pozycji. Współrzędnych w tym zdarzeniu nie ma.
@@ -242,6 +272,7 @@ function filterEvents(
       case 'salvo':
       case 'shieldUp':
       case 'shieldBreak':
+      case 'revive':
         if (e.player === viewerId || withinAoi(e.x, e.y, eyeX, eyeY, aoi)) out.push(e);
         break;
     }

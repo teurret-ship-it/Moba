@@ -13,7 +13,7 @@ npm run build          # produkcyjny build do dist/
 npm run build:single   # jeden samodzielny plik HTML do dist-single/
 ```
 
-`build:single` daje `dist-single/arena.html` — całą grę w jednym pliku (~519 kB,
+`build:single` daje `dist-single/arena.html` — całą grę w jednym pliku (~541 kB,
 zero zewnętrznych żądań). To jest format do wysłania pięciu obcym osobom
 z kroku 7 Fazy 0: otwiera się na cudzym telefonie bez instalacji, konta
 i bez serwera. Ten sam plik przyjmują portale web z sekcji 8.
@@ -25,17 +25,44 @@ i bez serwera. Ten sam plik przyjmują portale web z sekcji 8.
 Arena „last man standing" dla 12 uczestników, 2,5D izometryczna, runda do
 4 minut, lobby wypełnione botami. Gracz porusza się pływającą gałką na lewej
 połowie ekranu, atak podstawowy jest **automatyczny** (wymóg jednej ręki),
-a trzy przyciski po prawej to trzy decyzje:
+a trzy przyciski po prawej to trzy decyzje.
 
-| Akcja | Działanie | Odnowienie |
-|---|---|---|
-| ➤ **Skok** | szybki wyskok w kierunku ruchu, bez możliwości sterowania w locie | 6 s |
-| ◍ **Cień** | znikasz — serwer przestaje wysyłać cię innym klientom | 14 s |
-| ✸ **Fala** | wybuch obszarowy, odrzuca i wybija z ukrycia (także ciebie) | 10 s |
+### Trzy klasy
+
+Wszystkie dzielą tę samą strukturę kitu — trzy sloty, zawsze te same trzy
+przyciski. Gracz uczy się sterowania raz, a mimo to każda klasa gra inaczej;
+przy jednej ręce na telefonie to warunek, nie wygoda.
+
+| Klasa | Sylwetka | RUCH | SZTUCZKA | MOC |
+|---|---|---|---|---|
+| **Łowca** | koło, 100 HP | ➤ Skok | ◍ Cień | ⁙ Salwa — 3 strzały z dystansu |
+| **Kolos** | sześciokąt, 130 HP | ⏵ Szarża — tratuje i odrzuca | ❖ Tarcza — pochłania 40 obrażeń | ✸ Fala — wybuch dookoła |
+| **Widmo** | grot, 95 HP | ⇢ Mgnienie — teleport | ◍ Cień | ✦ Rozdarcie — stożek, z ukrycia ×2 |
+
+**Ukrycie wycisza auto-atak.** Atak jest automatyczny, więc gracz nie może go
+powstrzymać — a strzelając w ukryciu sam by się zdradzał w chwili podejścia do
+celu. Cień jest więc stanem decyzji: wychodzisz z niego własnym ciosem,
+w wybranym momencie, a nie dlatego, że wróg wszedł w zasięg.
+
+### Progresja w trakcie rundy
+
+Za walkę i przetrwanie zbierasz doświadczenie. Na każdym poziomie dostajesz
+**trzy karty do wyboru** — dwanaście ulepszeń, każde do wzięcia kilka razy
+(siła, wampiryzm, drugie życie, impet…). Wybory się kumulują, więc pod koniec
+rundy ta sama klasa gra inaczej niż na starcie.
+
+Trzy decyzje projektowe, wszystkie wymuszone przez cel Fazy 1:
+
+1. **Gra się nie zatrzymuje.** Pauza jest niemożliwa w meczu z ludźmi, więc nie
+   wolno jej zakładać już teraz. Karty czekają na tapnięcie, runda leci dalej.
+2. **Wybór ma termin.** Po 9 sekundach ulepszenie wybiera się samo.
+3. **Serwer rozstrzyga.** Klient przysyła numer karty, nigdy efektu — indeks
+   jest walidowany wobec oferty, którą serwer sam wystawił.
 
 Do tego: kurcząca się strefa, trzy rodzaje dropów (leczenie, prędkość,
-obrażenia), zrzuty zaopatrzenia co 45 s jako generator starć oraz
-regeneracja poza walką.
+obrażenia), zrzuty zaopatrzenia co 45 s jako generator starć, regeneracja poza
+walką oraz wejście do nowej rundy od razu po eliminacji — bramka Fazy 0 mierzy
+chęć zagrania jeszcze raz, nie długość pojedynczej rundy.
 
 Przełączniki do playtestu:
 
@@ -71,7 +98,10 @@ src/
 ├── sim/         SYMULACJA — czysta, deterministyczna, zero DOM i zero Three.js
 │   ├── sim.ts          krok symulacji o stałym DT (20 Hz)
 │   ├── movement.ts     ruch — jedyne miejsce zmieniające pozycję
+│   ├── classes.ts      trzy klasy i parametry umiejętności
 │   ├── combat.ts       walka, umiejętności, regeneracja
+│   ├── upgrades.ts     dwanaście ulepszeń i statystyki wynikowe
+│   ├── progression.ts  doświadczenie, awanse, wybór kart
 │   ├── zone.ts         kurcząca się strefa
 │   ├── pickups.ts      dropy i zdarzenia mapy
 │   ├── bots.ts         AI wypełniające lobby
@@ -117,7 +147,7 @@ Wobec budżetów z sekcji 4 i 13 planu:
 
 | Metryka | Budżet | Zmierzone |
 |---|---|---|
-| Initial download | ≤15 MB (limit 20) | **~526 kB** (137 kB gzip) |
+| Initial download | ≤15 MB (limit 20) | **~541 kB** (~140 kB gzip) |
 | Zużycie danych / mecz | ≤1,5 MB (limit 3) | **~0,22 MB** |
 | Snapshot | — | 101 B @ 15 Hz ≈ 1,5 kB/s |
 | Tick symulacji | 15–20 Hz | 20 Hz |
@@ -147,15 +177,37 @@ z sekcji 1. Trzy zmiany, każda wymierzona w zmierzoną przyczynę:
 3. **narastanie agresji botów** — bez tego wszystkie 12 botów ruszało do walki
    w sekundzie zero i runda nie miała wczesnej fazy, tylko masakrę i dogrywkę.
 
-Stan po zmianach: **min 136 s, mediana 145 s, maks. 158 s; po minucie żyje
-5,7 z 12**.
+Po dołożeniu klas i progresji tempo zmierzono ponownie. Stan obecny:
+**min 125 s, mediana 164 s, maks. 194 s**, przy zerze śmierci od strefy —
+o rundzie decydują walki, nie krąg.
 
-> **Otwarta kwestia do rozstrzygnięcia w playteście.** Mediana 2:25 jest wciąż
+Druga sonda, `classes.probe`, pilnuje równowagi klas na 60 rundach.
+Współczynniki zwycięstw (1,0 = uczciwy udział): **Łowca 1,22 / Kolos 1,22 /
+Widmo 0,55**.
+
+> **Otwarta kwestia do rozstrzygnięcia w playteście.** Mediana 2:44 wciąż jest
 > poniżej dolnej granicy 3 minut z sekcji 1. Dalszego wydłużania celowo nie
 > robiłem: wymagałoby dalszego obniżania obrażeń, a to robi walkę „gąbczastą" —
 > uderzając w jedyne kryterium Fazy 0. Dodatkowo to pomiar samych botów;
 > człowiek gra ostrożniej. Decyzja należy do playtestu, nie do strojenia liczb
 > w próżni.
+
+Runda jest też z założenia „przednio obciążona": po minucie żyje ok. 4,5 z 12.
+Próby sztucznego spowalniania wczesnej fazy psuły tempo całej rundy, więc
+odpowiedzią jest natychmiastowe wejście do następnej rundy po eliminacji,
+a nie rozciąganie tej trwającej.
+
+**Dwa błędy znalezione przez sondy, nie przez granie:**
+
+- *Slot RUCH dawał darmowy pęd.* Mgnienie ma prędkość 210, a prędkość po
+  zakończeniu skoku nie była ucinana — hamowanie z takiej wartości trwa ~3 s.
+  Widmo leciało więc długo po teleporcie i wynosiło je średnio 7,5 jednostki
+  poza kurczący się krąg: **74 śmierci od strefy na 40 rund wobec 3 u Kolosa**.
+  Wyglądało to na problem równowagi klas, a było błędem kinematyki. Po
+  poprawce: 4 śmierci od strefy.
+- *Boty zbiegały się na jedną ofiarę.* Pół lobby brało ten sam cel, który ginął
+  w sekundy niezależnie od tempa rampy agresji. Kara za tłok w wyborze celu
+  przywróciła wczesnej fazie kształt potyczek.
 
 ---
 

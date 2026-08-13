@@ -2,6 +2,7 @@ import { DT, TICK_HZ } from '../sim/constants.ts';
 import { applyMovement, tryStartMove } from '../sim/movement.ts';
 import type { InputFrame, PlayerState } from '../sim/types.ts';
 import type { SelfView, Snapshot } from '../sim/snapshot.ts';
+import { computeStats } from '../sim/upgrades.ts';
 
 /**
  * Predykcja ruchu własnej postaci (sekcja 7).
@@ -159,6 +160,16 @@ function fromSelfView(self: SelfView): PlayerState {
     cdTrick: self.cdTrick,
     cdPower: self.cdPower,
     cdAttack: 0,
+
+    xp: self.xp,
+    level: self.level,
+    upgrades: [...self.upgrades],
+    offer: [],
+    offerDeadlineTick: -1,
+    // Te same ulepszenia dają te same statystyki co na serwerze —
+    // inaczej predykcja ruchu rozjechałaby się po każdym awansie.
+    stats: computeStats(self.classId, self.upgrades),
+    impetusEndTick: self.impetusEndTick,
     speedBuffEndTick: self.speedBuffEndTick,
     damageBuffEndTick: self.damageBuffEndTick,
     kills: self.kills,

@@ -56,6 +56,7 @@ export class Hud {
     deadPanel: HTMLElement;
     deadPlace: HTMLElement;
     requeue: HTMLButtonElement;
+    mute: HTMLButtonElement;
   };
 
   private bannerUntil = 0;
@@ -92,6 +93,7 @@ export class Hud {
       deadPanel: must(root, '#dead-panel'),
       deadPlace: must(root, '#dead-place'),
       requeue: must(root, '#btn-requeue') as HTMLButtonElement,
+      mute: must(root, '#btn-mute') as HTMLButtonElement,
     };
   }
 
@@ -190,6 +192,17 @@ export class Hud {
           break;
       }
     }
+  }
+
+  /** Przełącznik dźwięku. `onToggle` zwraca nowy stan wyciszenia. */
+  bindMute(onToggle: () => boolean, initiallyMuted: boolean): void {
+    const paint = (muted: boolean) => {
+      this.el.mute.textContent = muted ? '🔇' : '🔊';
+      this.el.mute.classList.toggle('is-off', muted);
+      this.el.mute.setAttribute('aria-pressed', String(muted));
+    };
+    paint(initiallyMuted);
+    this.el.mute.onclick = () => paint(onToggle());
   }
 
   /** Podpięcie akcji gracza spoza gałki i przycisków akcji. */

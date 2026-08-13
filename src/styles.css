@@ -119,6 +119,24 @@ body {
   50% { opacity: 0.55; }
 }
 
+/* Przycisk dźwięku siedzi w górnym pasku: rzadko używany, więc daleko od
+   kciuka, ale zawsze widoczny — cisza w grze musi być odwracalna jednym
+   tapnięciem, także w środku rundy. */
+.hud-icon-btn {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1;
+  pointer-events: auto;
+}
+
+.hud-icon-btn.is-off { opacity: 0.5; }
+
 /* ===== Killfeed ===== */
 
 #hud-killfeed {

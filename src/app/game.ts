@@ -14,6 +14,7 @@ import { ArenaRenderer } from '../render/renderer.ts';
 import { PICKUP_COLORS } from '../render/textures.ts';
 import { Hud } from '../ui/hud.ts';
 import { Screens } from '../ui/screens.ts';
+import { Sfx } from '../audio/sfx.ts';
 
 /**
  * Spięcie wszystkiego w pętlę.
@@ -41,6 +42,7 @@ export class Game {
   private readonly controls: Controls;
   private readonly hud: Hud;
   private readonly screens: Screens;
+  private readonly sfx = new Sfx();
 
   private transport: LocalTransport | null = null;
   private buffer = new SnapshotBuffer();
@@ -51,6 +53,7 @@ export class Game {
   private localClass: ClassId = 'lowca';
   private names = new Map<number, string>();
   private colors = new Map<number, number>();
+  private classes = new Map<number, string>();
 
   private running = false;
   private accumulator = 0;
@@ -89,7 +92,17 @@ export class Game {
       () => this.startMatch(),
     );
 
-    this.screens.showStart((classId) => this.startMatch(undefined, classId));
+    this.hud.bindMute(
+      () => this.sfx.toggleMute(),
+      this.sfx.isMuted,
+    );
+
+    this.screens.showStart((classId) => {
+      // Kontekst audio wolno obudzić tylko z gestu użytkownika — „Graj"
+      // jest jedynym pewnym miejscem, przez które przechodzi każdy gracz.
+      this.sfx.unlock();
+      this.startMatch(undefined, classId);
+    });
   }
 
   startMatch(seed?: number, classId?: ClassId): void {
@@ -116,9 +129,11 @@ export class Game {
 
     this.names.clear();
     this.colors.clear();
+    this.classes.clear();
     for (const p of this.transport.sim.world.players) {
       this.names.set(p.id, p.name);
       this.colors.set(p.id, p.colorIndex);
+      this.classes.set(p.id, p.classId);
     }
 
     // Teren odtwarzamy z ziarna — tak samo jak klient w Fazie 1, który
@@ -145,59 +160,88 @@ export class Game {
 
     this.hud.handleEvents(snapshot.events, this.localPlayerId, this.names, this.colors, performance.now());
 
+    const self = snapshot.self;
+
     for (const e of snapshot.events) {
       switch (e.type) {
         case 'damage':
           this.renderer.fx.hit(e.x, e.y, e.amount);
-          if (e.target === this.localPlayerId) this.renderer.shake(0.25);
+          if (e.target === this.localPlayerId) {
+            this.renderer.shake(0.25);
+            this.playAt('hurt', e.x, e.y, self, snapshot.tick);
+          } else if (e.source === this.localPlayerId) {
+            this.playAt('attack', e.x, e.y, self, snapshot.tick);
+          }
           break;
         case 'kill':
           break;
         case 'burst':
           this.renderer.fx.burst(e.x, e.y, e.radius, this.colors.get(e.player) ?? 0);
           if (e.player === this.localPlayerId) this.renderer.shake(0.35);
+          this.playAt('burst', e.x, e.y, self, snapshot.tick);
           break;
         case 'rend':
           this.renderer.fx.rend(e.x, e.y, e.facing, POWER_ABILITY.rozdarcie.range, this.colors.get(e.player) ?? 0);
           if (e.player === this.localPlayerId) this.renderer.shake(0.2);
+          this.playAt('rend', e.x, e.y, self, snapshot.tick);
           break;
         case 'salvo': {
           const target = snapshot.players.find((p) => p.id === e.target);
           if (target) this.renderer.fx.tracer(e.x, e.y, target.x, target.y, this.colors.get(e.player) ?? 0);
+          this.playAt('salvo', e.x, e.y, self, snapshot.tick);
           break;
         }
         case 'shieldUp':
           this.renderer.fx.shield(e.x, e.y, true);
+          this.playAt('shieldUp', e.x, e.y, self, snapshot.tick);
           break;
         case 'levelUp': {
           const me = snapshot.players.find((p) => p.id === e.player);
           if (me) this.renderer.fx.levelUp(me.x, me.y);
+          // Awans jest komunikatem interfejsu, nie zdarzeniem w świecie —
+          // gra bez tłumienia odległością, na pełnej głośności.
+          this.sfx.play('levelUp', { tick: snapshot.tick });
           break;
         }
+        case 'upgradePicked':
+          this.sfx.play('upgrade', { tick: snapshot.tick });
+          break;
         case 'revive': {
           this.renderer.fx.death(e.x, e.y, this.colors.get(e.player) ?? 0);
           if (e.player === this.localPlayerId) this.renderer.shake(0.5);
+          this.sfx.play('revive', { tick: snapshot.tick });
           break;
         }
         case 'shieldBreak':
           this.renderer.fx.shield(e.x, e.y, false);
           if (e.player === this.localPlayerId) this.renderer.shake(0.3);
+          this.playAt('shieldBreak', e.x, e.y, self, snapshot.tick);
           break;
-        case 'dash':
+        case 'dash': {
           this.renderer.fx.dash(e.x, e.y, this.colors.get(e.player) ?? 0);
+          const cls = this.classes.get(e.player);
+          this.playAt(cls === 'widmo' ? 'blink' : 'dash', e.x, e.y, self, snapshot.tick);
           break;
+        }
         case 'stealthIn':
           this.renderer.fx.stealth(e.x, e.y, true);
+          this.playAt('stealthIn', e.x, e.y, self, snapshot.tick);
           break;
         case 'stealthOut':
           this.renderer.fx.stealth(e.x, e.y, false);
+          this.playAt('stealthOut', e.x, e.y, self, snapshot.tick);
           break;
         case 'pickup':
           this.renderer.fx.pickup(e.x, e.y, PICKUP_COLORS[e.kind]);
+          this.playAt('pickup', e.x, e.y, self, snapshot.tick);
+          break;
+        case 'zoneShrink':
+          this.sfx.play('zone', { tick: snapshot.tick });
           break;
         case 'supplyWarn':
         case 'supplyDrop':
           this.renderer.fx.supplyMarker(e.x, e.y);
+          this.sfx.play('supply', { tick: snapshot.tick });
           break;
         default:
           break;
@@ -210,7 +254,12 @@ export class Game {
         const victimColor = this.colors.get(e.victim) ?? 0;
         const view = snapshot.players.find((p) => p.id === e.victim);
         if (view) this.renderer.fx.death(view.x, view.y, victimColor);
-        if (e.victim === this.localPlayerId) this.renderer.shake(0.8);
+        if (e.victim === this.localPlayerId) {
+          this.renderer.shake(0.8);
+          this.sfx.play('death', { tick: snapshot.tick });
+        } else if (e.killer === this.localPlayerId) {
+          this.sfx.play('kill', { tick: snapshot.tick });
+        }
       }
     }
   }
@@ -294,6 +343,7 @@ export class Game {
     this.controls.releaseAll();
 
     const result = transport.sim.result();
+    this.sfx.play(result.winner === this.localPlayerId ? 'win' : 'death');
     this.screens.showResult(result, this.localPlayerId, () => this.startMatch());
   }
 
@@ -327,6 +377,30 @@ export class Game {
     ]);
   }
 
+  /**
+   * Dźwięk zdarzenia w świecie: tłumiony odległością i panoramowany
+   * względem gracza, żeby niósł informację „gdzie", a nie tylko „coś".
+   */
+  private playAt(
+    name: Parameters<Sfx['play']>[0],
+    x: number,
+    y: number,
+    self: { x: number; y: number } | null,
+    tick: number,
+  ): void {
+    if (!self) {
+      this.sfx.play(name, { tick });
+      return;
+    }
+    const dx = x - self.x;
+    const dy = y - self.y;
+    this.sfx.play(name, {
+      dist: Math.hypot(dx, dy),
+      pan: Math.max(-1, Math.min(1, dx / 22)),
+      tick,
+    });
+  }
+
   private onResize = (): void => {
     this.renderer.resize();
   };
@@ -342,8 +416,12 @@ export class Game {
     if (document.hidden) {
       this.hiddenAt = performance.now();
       this.controls.releaseAll();
+      // Telefon nie może grać w kieszeni.
+      this.sfx.setSuspended(true);
       return;
     }
+
+    this.sfx.setSuspended(false);
 
     const away = performance.now() - this.hiddenAt;
     this.lastFrame = performance.now();
@@ -373,6 +451,7 @@ export class Game {
     this.controls.dispose();
     this.transport?.dispose();
     this.renderer.dispose();
+    this.sfx.dispose();
   }
 }
 

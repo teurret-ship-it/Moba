@@ -59,6 +59,19 @@ Trzy decyzje projektowe, wszystkie wymuszone przez cel Fazy 1:
 3. **Serwer rozstrzyga.** Klient przysyła numer karty, nigdy efektu — indeks
    jest walidowany wobec oferty, którą serwer sam wystawił.
 
+### Dźwięk
+
+Cała ścieżka dźwiękowa jest **syntezowana przez WebAudio w locie** — zero
+plików, tak samo jak grafika. Dźwięk nie jest tu ozdobą: niesie informację,
+której obraz na małym ekranie nie zdąży przekazać — że trafiono właśnie
+CIEBIE, że ktoś obok wyszedł z ukrycia, że strefa rusza. Zdarzenia w świecie
+są tłumione odległością i panoramowane względem gracza, komunikaty interfejsu
+(awans, zrzut) grają bez tłumienia.
+
+Kontekst audio budzi się dopiero przy tapnięciu „Graj" (polityka
+autoodtwarzania), milknie przy przejściu w tło, a wyciszenie zapisuje się
+w `localStorage` i jest odwracalne jednym tapnięciem w trakcie rundy.
+
 ### Teren
 
 Arena nie jest już gołym dyskiem: filary i mury są **generowane z ziarna
@@ -98,7 +111,7 @@ wymagany do jej działania, chroni pieniądze, chroni dane osobowe, jest
 wymagany przez Google Play albo rozwiązuje **zmierzony** problem.
 
 Nie ma więc: serwera, kont, bazy, telemetrii, zgód, ekonomii, zakupów,
-rankingu, sklepu, dźwięku, TWA ani CI/CD deploymentu. To nie jest
+rankingu, sklepu, TWA ani CI/CD deploymentu. To nie jest
 zaległość — to są pozycje Fazy 1 i 2, które wchodzą **po** bramce Fazy 0.
 
 ---
@@ -125,6 +138,7 @@ src/
 │   └── snapshot.ts     filtr widoku: AoI + stealth, 15 Hz
 ├── client/      NETCODE — predykcja, interpolacja, transport
 ├── render/      Three.js, tekstury proceduralne, efekty
+├── audio/       syntezowane efekty (WebAudio, bez plików)
 ├── input/       gałka dotykowa + przyciski + klawiatura
 ├── ui/          HUD i ekrany (DOM, nie canvas)
 └── app/         pętla gry i cykl życia
@@ -164,7 +178,7 @@ Wobec budżetów z sekcji 4 i 13 planu:
 
 | Metryka | Budżet | Zmierzone |
 |---|---|---|
-| Initial download | ≤15 MB (limit 20) | **~541 kB** (~140 kB gzip) |
+| Initial download | ≤15 MB (limit 20) | **~552 kB** (~143 kB gzip) |
 | Zużycie danych / mecz | ≤1,5 MB (limit 3) | **~0,22 MB** |
 | Snapshot | — | 101 B @ 15 Hz ≈ 1,5 kB/s |
 | Tick symulacji | 15–20 Hz | 20 Hz |

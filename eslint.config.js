@@ -11,7 +11,7 @@ import tseslint from 'typescript-eslint';
  */
 export default tseslint.config(
   {
-    ignores: ['dist/**', 'node_modules/**', 'coverage/**'],
+    ignores: ['dist/**', 'dist-single/**', 'node_modules/**', 'coverage/**'],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
@@ -22,6 +22,7 @@ export default tseslint.config(
     },
     rules: {
       // Prefiks podkreślenia jako świadome „nieużywane".
+
       '@typescript-eslint/no-unused-vars': [
         'error',
         { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
@@ -29,6 +30,13 @@ export default tseslint.config(
       'no-console': ['warn', { allow: ['warn', 'error', 'log'] }],
       eqeqeq: ['error', 'always'],
       'prefer-const': 'error',
+    },
+  },
+  {
+    // Skrypty budujące działają w Node, nie w przeglądarce.
+    files: ['scripts/**/*.mjs', '*.config.js'],
+    languageOptions: {
+      globals: { process: 'readonly', console: 'readonly', Buffer: 'readonly' },
     },
   },
 );

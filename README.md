@@ -7,10 +7,16 @@ Cel fazy jest jeden i wąski: **sprawdzić, czy gra jest fajna**. Nic więcej.
 
 ```bash
 npm install
-npm run dev       # http://localhost:5173
-npm test          # symulacja, netcode, sonda balansu
-npm run build     # produkcyjny build do dist/
+npm run dev            # http://localhost:5173
+npm test               # symulacja, netcode, sonda balansu
+npm run build          # produkcyjny build do dist/
+npm run build:single   # jeden samodzielny plik HTML do dist-single/
 ```
+
+`build:single` daje `dist-single/arena.html` — całą grę w jednym pliku (~519 kB,
+zero zewnętrznych żądań). To jest format do wysłania pięciu obcym osobom
+z kroku 7 Fazy 0: otwiera się na cudzym telefonie bez instalacji, konta
+i bez serwera. Ten sam plik przyjmują portale web z sekcji 8.
 
 ---
 

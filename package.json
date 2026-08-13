@@ -9,6 +9,7 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --host",
     "typecheck": "tsc --noEmit",
+    "build:single": "node scripts/build-single-file.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "eslint ."

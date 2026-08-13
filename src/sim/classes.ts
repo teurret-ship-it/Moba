@@ -44,6 +44,10 @@ export interface ClassDef {
   trick: TrickAbility;
   power: PowerAbility;
 
+  /** Zdanie o cesze klasy na ekranie wyboru. Puste = klasa bez cechy. */
+  passive?: string;
+  /** Cecha mechaniczna: eliminacja natychmiast odnawia slot SZTUCZKA. */
+  trickResetOnKill?: boolean;
 }
 
 export const ABILITY_NAMES: Record<MoveAbility | TrickAbility | PowerAbility, string> = {
@@ -119,6 +123,8 @@ export const CLASSES: Record<ClassId, ClassDef> = {
     move: 'mgnienie',
     trick: 'cien',
     power: 'rozdarcie',
+    passive: 'Zniknięcie — eliminacja natychmiast odnawia Cień.',
+    trickResetOnKill: true,
   },
 
   // Nie walczy o pozycję — walczy o to, gdzie przeciwnik myśli, że jesteś.

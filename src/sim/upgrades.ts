@@ -36,7 +36,16 @@ export type UpgradeId =
   | 'magnes'
   | 'drugie_zycie'
   | 'impet'
-  | 'furia';
+  | 'furia'
+  // Klasowe — patrz CLASS_UPGRADES niżej.
+  | 'grad'
+  | 'czajenie'
+  | 'pancerz'
+  | 'taran'
+  | 'zasadzka'
+  | 'przeskok'
+  | 'trwala_kopia'
+  | 'ciasne_sidla';
 
 export interface UpgradeDef {
   id: UpgradeId;
@@ -46,6 +55,14 @@ export interface UpgradeDef {
   glyph: string;
   /** Ile razy da się wziąć. Po wyczerpaniu znika z puli. */
   maxStacks: number;
+  /**
+   * Klasa, dla której to ulepszenie istnieje. `undefined` = pula wspólna.
+   *
+   * Wzmacnia konkretną umiejętność z kitu, więc dla innej klasy byłoby
+   * martwą kartą — a martwa karta w ofercie trzech to w praktyce oferta
+   * dwóch.
+   */
+  classId?: ClassId;
 }
 
 export const UPGRADES: Record<UpgradeId, UpgradeDef> = {
@@ -61,9 +78,71 @@ export const UPGRADES: Record<UpgradeId, UpgradeDef> = {
   drugie_zycie: { id: 'drugie_zycie', name: 'Drugie życie', text: 'Raz na rundę przeżywasz śmierć z 30% zdrowia', glyph: '✧', maxStacks: 1 },
   impet: { id: 'impet', name: 'Impet', text: 'Po Skoku +25% prędkości na 2 s', glyph: '➹', maxStacks: 2 },
   furia: { id: 'furia', name: 'Furia', text: '+30% obrażeń poniżej 40% zdrowia', glyph: '✹', maxStacks: 2 },
+
+  // --- Klasowe ---------------------------------------------------------------
+  //
+  // Dwanaście ulepszeń wspólnych daje tę samą krzywą każdej klasie: rosną
+  // liczby, nie sposób grania. Klasowe robią coś innego — wzmacniają tę
+  // umiejętność, która definiuje klasę, więc runda buduje TĘ postać,
+  // a nie „postać z większymi liczbami".
+  //
+  // To jest też jedyny uczciwy lewar na Widmo (wsp. wygranych 0,46 przy
+  // 1,38 Łowcy): podnoszenie mu obrażeń bazowych psuje starcie w otwartym
+  // polu, którego Widmo i tak nie ma wygrywać. Zasadzka nagradza to,
+  // do czego klasa jest zbudowana.
+  grad: {
+    // Startowo +2 pociski na stos. Przy 10 obrażeniach za pocisk dawało to
+    // Łowcy +40 obrażeń w jednym przycisku i wywindowało go do wsp. 1,55
+    // (najczęściej brana karta klasy). Jeden pocisk na stos wystarczy,
+    // żeby Salwa była nadal tą kartą, którą się chce wziąć.
+    id: 'grad', name: 'Grad', text: 'Salwa wystrzeliwuje pocisk więcej',
+    glyph: '⁘', maxStacks: 2, classId: 'lowca',
+  },
+  czajenie: {
+    // Pierwsza wersja obiecywała, że Cień "nie spowalnia" — a ukrycie
+    // w tej grze nigdy nie spowalniało, tylko przyspieszało (mnożnik 1,18).
+    // Karta nie robiła więc nic poza wydłużeniem czasu. Teraz wzmacnia to,
+    // co Cień naprawdę daje Łowcy: możliwość wyjścia ze starcia.
+    id: 'czajenie', name: 'Czajenie', text: 'Cień trwa +1,5 s i jest w nim szybciej',
+    glyph: '☾', maxStacks: 2, classId: 'lowca',
+  },
+  pancerz: {
+    id: 'pancerz', name: 'Pancerz', text: 'Tarcza pochłania +20 obrażeń',
+    glyph: '⛨', maxStacks: 3, classId: 'kolos',
+  },
+  taran: {
+    id: 'taran', name: 'Taran', text: 'Szarża zadaje +12 obrażeń i mocniej odrzuca',
+    glyph: '⏻', maxStacks: 2, classId: 'kolos',
+  },
+  zasadzka: {
+    id: 'zasadzka', name: 'Zasadzka', text: 'Rozdarcie z ukrycia zadaje jeszcze +60%',
+    glyph: '☠', maxStacks: 2, classId: 'widmo',
+  },
+  przeskok: {
+    id: 'przeskok', name: 'Przeskok', text: 'Mgnienie odnawia się o 30% szybciej',
+    glyph: '⇶', maxStacks: 2, classId: 'widmo',
+  },
+  trwala_kopia: {
+    id: 'trwala_kopia', name: 'Trwała kopia', text: 'Zwód ma +30 zdrowia i stoi 2 s dłużej',
+    glyph: '⧈', maxStacks: 2, classId: 'kuglarz',
+  },
+  ciasne_sidla: {
+    id: 'ciasne_sidla', name: 'Ciasne sidła', text: 'Sidła spowalniają mocniej i o 1 s dłużej',
+    glyph: '❊', maxStacks: 2, classId: 'kuglarz',
+  },
 };
 
 export const UPGRADE_IDS = Object.keys(UPGRADES) as UpgradeId[];
+
+/** Ulepszenia klasowe pogrupowane — do ekranu wyboru postaci i testów. */
+export const CLASS_UPGRADES: Record<ClassId, UpgradeId[]> = UPGRADE_IDS.reduce(
+  (acc, id) => {
+    const cls = UPGRADES[id].classId;
+    if (cls) acc[cls].push(id);
+    return acc;
+  },
+  { lowca: [], kolos: [], widmo: [], kuglarz: [] } as Record<ClassId, UpgradeId[]>,
+);
 
 /** Ile kart pokazujemy przy awansie. Trzy: wybór bez paraliżu decyzyjnego. */
 export const OFFER_SIZE = 3;
@@ -108,6 +187,32 @@ export interface EffectiveStats {
   /** Mnożnik obrażeń przy niskim zdrowiu i próg jego działania. */
   furyMul: number;
   furyThreshold: number;
+
+  // --- Modyfikatory kitu klasowego ------------------------------------------
+  //
+  // Wszystkie są neutralne w wartości domyślnej (0 lub 1), więc klasa, która
+  // danego ulepszenia nie ma w puli, liczy się dokładnie tak jak wcześniej.
+
+  /** Salwa: dodatkowe pociski. */
+  salvoBonusShots: number;
+  /** Cień: dłuższe trwanie i dodatkowa prędkość w ukryciu. */
+  stealthBonusTicks: number;
+  stealthSpeedMul: number;
+  /** Tarcza: większa pochłaniana pula. */
+  shieldBonusAbsorb: number;
+  /** Szarża: mocniejsze wejście. */
+  chargeBonusDamage: number;
+  chargeBonusKnockback: number;
+  /** Rozdarcie: premia do mnożnika z ukrycia. */
+  ambushBonus: number;
+  /** Osobny mnożnik odnowienia slotu RUCH (Mgnienie). */
+  moveCooldownMul: number;
+  /** Zwód: wytrzymalsza i dłużej stojąca kopia. */
+  decoyBonusHp: number;
+  decoyBonusTicks: number;
+  /** Sidła: silniejsze i dłuższe spowolnienie. */
+  snareSlowBonus: number;
+  snareBonusTicks: number;
 }
 
 /**
@@ -139,6 +244,19 @@ export function computeStats(classId: ClassId, upgrades: readonly UpgradeId[]): 
     impetusTicks: count('impet') > 0 ? Math.round(2 * TICK_HZ) : 0,
     furyMul: count('furia') > 0 ? 1 + 0.3 * count('furia') : 1,
     furyThreshold: 0.4,
+
+    salvoBonusShots: count('grad'),
+    stealthBonusTicks: Math.round(1.5 * TICK_HZ) * count('czajenie'),
+    stealthSpeedMul: Math.pow(1.1, count('czajenie')),
+    shieldBonusAbsorb: 20 * count('pancerz'),
+    chargeBonusDamage: 12 * count('taran'),
+    chargeBonusKnockback: 10 * count('taran'),
+    ambushBonus: 0.6 * count('zasadzka'),
+    moveCooldownMul: Math.pow(0.7, count('przeskok')),
+    decoyBonusHp: 30 * count('trwala_kopia'),
+    decoyBonusTicks: Math.round(2 * TICK_HZ) * count('trwala_kopia'),
+    snareSlowBonus: 0.09 * count('ciasne_sidla'),
+    snareBonusTicks: Math.round(1 * TICK_HZ) * count('ciasne_sidla'),
   };
 
   return stats;
@@ -148,10 +266,16 @@ export function baseStats(classId: ClassId): EffectiveStats {
   return computeStats(classId, []);
 }
 
-/** Ulepszenia, które gracz może jeszcze wziąć (nie wyczerpał limitu). */
-export function availableUpgrades(upgrades: readonly UpgradeId[]): UpgradeId[] {
+/**
+ * Ulepszenia, które gracz może jeszcze wziąć (nie wyczerpał limitu).
+ *
+ * Klasowe wchodzą do puli tylko swojej klasie — reszta by ich nie użyła.
+ */
+export function availableUpgrades(upgrades: readonly UpgradeId[], classId: ClassId): UpgradeId[] {
   return UPGRADE_IDS.filter((id) => {
+    const def = UPGRADES[id];
+    if (def.classId !== undefined && def.classId !== classId) return false;
     const taken = upgrades.reduce((n, u) => (u === id ? n + 1 : n), 0);
-    return taken < UPGRADES[id].maxStacks;
+    return taken < def.maxStacks;
   });
 }

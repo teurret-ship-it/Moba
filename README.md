@@ -53,12 +53,28 @@ powstrzymać — a strzelając w ukryciu sam by się zdradzał w chwili podejśc
 celu. Cień jest więc stanem decyzji: wychodzisz z niego własnym ciosem,
 w wybranym momencie, a nie dlatego, że wróg wszedł w zasięg.
 
+**Cecha klasy.** Widmo ma jedyną cechę działającą bez przycisku: *eliminacja
+natychmiast odnawia Cień*. Powód jest w pomiarze, nie w fikcji — patrz sekcja
+o balansie niżej.
+
 ### Progresja w trakcie rundy
 
 Za walkę i przetrwanie zbierasz doświadczenie. Na każdym poziomie dostajesz
-**trzy karty do wyboru** — dwanaście ulepszeń, każde do wzięcia kilka razy
-(siła, wampiryzm, drugie życie, impet…). Wybory się kumulują, więc pod koniec
-rundy ta sama klasa gra inaczej niż na starcie.
+**trzy karty do wyboru** — dwanaście ulepszeń wspólnych, każde do wzięcia kilka
+razy (siła, wampiryzm, drugie życie, impet…), plus **dwie karty klasowe**
+widoczne tylko dla swojej klasy. Wybory się kumulują, więc pod koniec rundy
+ta sama klasa gra inaczej niż na starcie.
+
+| Klasa | Karty klasowe |
+|---|---|
+| **Łowca** | ⁘ Grad — Salwa strzela częściej · ☾ Czajenie — dłuższy i szybszy Cień |
+| **Kolos** | ⛨ Pancerz — grubsza Tarcza · ⏻ Taran — mocniejsza Szarża |
+| **Widmo** | ☠ Zasadzka — Rozdarcie z ukrycia bije jeszcze mocniej · ⇶ Przeskok — częstsze Mgnienie |
+| **Kuglarz** | ⧈ Trwała kopia — twardszy Zwód · ❊ Ciasne sidła — silniejsze spowolnienie |
+
+Wspólne dwanaście podnosi liczby; klasowe zmieniają to, co postać robi. Karta
+klasowa nie trafia do obcej klasy — dla niej byłaby martwa, a martwa karta
+w ofercie trzech to w praktyce oferta dwóch.
 
 Trzy decyzje projektowe, wszystkie wymuszone przez cel Fazy 1:
 
@@ -268,8 +284,8 @@ naraz, jest ogonem rozkładu, a nie wadą formatu. Stan obecny:
 w przedziale 3–6 minut z sekcji 1.
 
 Druga sonda, `classes.probe`, pilnuje równowagi klas na **120 rundach**.
-Współczynniki zwycięstw (1,0 = uczciwy udział): **Łowca 1,38 / Kolos 1,25 /
-Widmo 0,46 / Kuglarz 0,93**.
+Współczynniki zwycięstw (1,0 = uczciwy udział): **Łowca 1,14 / Kolos 1,28 /
+Widmo 0,62 / Kuglarz 0,96**.
 
 > Próba jest duża celowo. Przy 60 rundach na klasę wypada ~20 zwycięstw,
 > a szum Poissona na takiej liczbie to ±0,22 na współczynniku — strojenie
@@ -289,6 +305,32 @@ Próby sztucznego spowalniania wczesnej fazy psuły tempo całej rundy, więc
 odpowiedzią jest natychmiastowe wejście do następnej rundy po eliminacji,
 a nie rozciąganie tej trwającej.
 
+### Widmo — jak pomiar zmienił projekt, a nie liczby
+
+Widmo długo siedziało na 0,46. Odruch mówi „dodaj mu obrażeń", ale zanim
+cokolwiek ruszyłem, doraźna instrumentacja policzyła, *gdzie* ta klasa traci
+rundę. Wynik był jednoznaczny i zaskakujący:
+
+| | Łowca | Widmo |
+|---|---|---|
+| średnie miejsce | 6,01 | 6,50 |
+| w pierwszej trójce | 31% | 29% |
+| **zwycięstwa** | **46** | **12** |
+
+Widmo dociera do finałowej trójki praktycznie tak samo często — i tam przegrywa.
+To nie jest problem siły, tylko końcówki: w finale nie ma się gdzie schować,
+a Cień odnawia się 14 sekund, więc klasa oparta na zaskoczeniu wchodzi
+w decydujące 30 sekund bez swojego jedynego narzędzia.
+
+Stąd cecha **Zniknięcie**: eliminacja natychmiast odnawia Cień. Oddaje Widmu
+końcówkę i nagradza dokładnie to, do czego jest zbudowane, zamiast podnosić mu
+obrażenia w otwartym polu, którego i tak nie ma wygrywać. Efekt: **0,39 → 0,72**
+w tym samym pomiarze, przy jednoczesnym ściągnięciu Łowcy z 1,55 (karta *Grad*
+w pierwszej wersji dawała mu +40 obrażeń w jednym przycisku).
+
+Cecha jest przypisana klasie, nie umiejętności — Łowca też ma Cień i też by ją
+dostał, a jest po drugiej stronie tabeli.
+
 **Dwa błędy znalezione przez sondy, nie przez granie:**
 
 - *Slot RUCH dawał darmowy pęd.* Mgnienie ma prędkość 210, a prędkość po
@@ -300,6 +342,12 @@ a nie rozciąganie tej trwającej.
 - *Boty zbiegały się na jedną ofiarę.* Pół lobby brało ten sam cel, który ginął
   w sekundy niezależnie od tempa rampy agresji. Kara za tłok w wyborze celu
   przywróciła wczesnej fazie kształt potyczek.
+
+**Jeden błąd znaleziony przez test, który sam był błędny.** Karta *Czajenie*
+obiecywała, że „Cień nie spowalnia" — a ukrycie w tej grze nigdy nie
+spowalniało, tylko przyspieszało (mnożnik 1,18). Karta nie robiła więc nic
+poza wydłużeniem czasu, a test, który miał to sprawdzić, przewracał się na
+własnym założeniu. Projekt karty poszedł za kodem, nie odwrotnie.
 
 ---
 

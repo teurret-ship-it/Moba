@@ -760,10 +760,23 @@ body {
 /* Opis wybranej klasy — jedno zdanie, po co bym ją wziął. */
 .class-tagline {
   min-height: 32px;
-  margin: -8px 0 16px;
+  margin: -8px 0 6px;
   font-size: 12px;
   line-height: 1.4;
   color: var(--muted);
+}
+
+/* Cecha klasy — wyróżniona, bo jest jedyną rzeczą działającą bez przycisku. */
+.class-passive {
+  margin: 0 0 14px;
+  font-size: 11px;
+  line-height: 1.4;
+  letter-spacing: 0.02em;
+  color: var(--accent);
+}
+
+.class-passive[hidden] {
+  display: none;
 }
 
 .howto {

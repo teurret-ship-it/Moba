@@ -129,6 +129,17 @@ export class Screens {
       this.classPick.after(tagline);
     }
     tagline.textContent = cls.tagline;
+
+    // Cecha klasy — działa bez przycisku, więc gracz nie ma jej skąd odkryć
+    // w trakcie rundy. Jedyne miejsce, gdzie da się ją pokazać, jest tutaj.
+    let passive = this.start.querySelector<HTMLElement>('.class-passive');
+    if (!passive) {
+      passive = document.createElement('p');
+      passive.className = 'class-passive';
+      tagline.after(passive);
+    }
+    passive.textContent = cls.passive ?? '';
+    passive.hidden = !cls.passive;
   }
 
   /**

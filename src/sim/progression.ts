@@ -98,7 +98,7 @@ function applyPick(world: World, p: PlayerState, index: number): void {
  * z lekką preferencją klasową.
  */
 function rollOffer(p: PlayerState, rng: Rng): UpgradeId[] {
-  const pool = availableUpgrades(p.upgrades);
+  const pool = availableUpgrades(p.upgrades, p.classId);
   const out: UpgradeId[] = [];
   const taken = new Set<UpgradeId>();
 
@@ -126,6 +126,11 @@ export function botPick(p: PlayerState, rng: Rng): number {
     if (p.classId === 'kolos' && (id === 'wytrzymalosc' || id === 'regeneracja')) w = 2.2;
     if (p.classId === 'widmo' && (id === 'sila' || id === 'wampiryzm' || id === 'wytrzymalosc')) w = 2.2;
     if (p.classId === 'lowca' && (id === 'zasieg' || id === 'zwinnosc')) w = 2.2;
+    // Ulepszenie klasowe trafia w to, co postać i tak robi, więc jest dla
+    // bota niemal zawsze lepsze niż kolejny procent obrażeń. „Niemal" jest
+    // celowe — bot biorący zawsze to samo jest rozpoznawalny po dwóch
+    // rundach, a to psuje pierwsze wrażenie z sekcji 7.
+    if (UPGRADES[id].classId !== undefined) w *= 2.4;
     // Drugie życie jest silne dla każdego — boty też to „widzą".
     if (id === 'drugie_zycie') w *= 1.8;
     return w;

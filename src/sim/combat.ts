@@ -108,7 +108,7 @@ export function tryStartTrick(world: World, p: PlayerState, input: InputFrame): 
   if (trick === 'cien') {
     if (isStealthed(p, world.tick)) return;
     const def = TRICK_ABILITY.cien;
-    p.stealthEndTick = world.tick + def.durationTicks;
+    p.stealthEndTick = world.tick + def.durationTicks + p.stats.stealthBonusTicks;
     p.cdTrick = world.tick + Math.round(def.cooldownTicks * p.stats.cooldownMul);
     // Wejście w ukrycie uzbraja zasadzkę — pierwszy cios po wyjściu
     // liczy się podwójnie dla Rozdarcia.
@@ -131,11 +131,11 @@ export function tryStartTrick(world: World, p: PlayerState, input: InputFrame): 
       // zobowiązaniem: zdradza miejsce, w którym byłeś.
       x: p.x,
       y: p.y,
-      hp: def.hp,
-      maxHp: def.hp,
+      hp: def.hp + p.stats.decoyBonusHp,
+      maxHp: def.hp + p.stats.decoyBonusHp,
       colorIndex: p.colorIndex,
       classId: p.classId,
-      endTick: world.tick + def.durationTicks,
+      endTick: world.tick + def.durationTicks + p.stats.decoyBonusTicks,
     });
     p.cdTrick = world.tick + Math.round(def.cooldownTicks * p.stats.cooldownMul);
     world.events.push({ type: 'decoySpawn', player: p.id, x: p.x, y: p.y, tick: world.tick });
@@ -145,7 +145,7 @@ export function tryStartTrick(world: World, p: PlayerState, input: InputFrame): 
   // Tarcza
   const def = TRICK_ABILITY.tarcza;
   if (p.shieldHp > 0 && world.tick < p.shieldEndTick) return;
-  p.shieldHp = def.absorb;
+  p.shieldHp = def.absorb + p.stats.shieldBonusAbsorb;
   p.shieldEndTick = world.tick + def.durationTicks;
   p.cdTrick = world.tick + Math.round(def.cooldownTicks * p.stats.cooldownMul);
   world.events.push({ type: 'shieldUp', player: p.id, x: p.x, y: p.y, tick: world.tick });
@@ -174,7 +174,7 @@ export function tryStartPower(world: World, p: PlayerState, input: InputFrame): 
     const target = findAttackTarget(world, p, def.range);
     // Salwa bez celu nie odpala — nie marnujemy odnowienia na powietrze.
     if (!target) return;
-    p.salvoLeft = def.shots;
+    p.salvoLeft = def.shots + p.stats.salvoBonusShots;
     p.salvoNextTick = world.tick;
     p.salvoTargetId = target.id;
     p.cdPower = world.tick + Math.round(def.cooldownTicks * p.stats.cooldownMul);
@@ -309,7 +309,9 @@ function fireRend(world: World, p: PlayerState): void {
   const ambush = p.ambushReady && isStealthed(p, world.tick);
   breakStealth(world, p);
 
-  const mul = damageMultiplier(p, world.tick) * (ambush ? def.ambushMultiplier : 1);
+  const mul =
+    damageMultiplier(p, world.tick) *
+    (ambush ? def.ambushMultiplier + p.stats.ambushBonus : 1);
   if (ambush) p.ambushReady = false;
 
   for (const other of world.players) {
@@ -356,8 +358,8 @@ function fireSnare(world: World, p: PlayerState): void {
     if (d > def.radius) continue;
     if (!hasLineOfSight(p.x, p.y, other.x, other.y, world.obstacles)) continue;
 
-    other.slowEndTick = world.tick + def.durationTicks;
-    other.slowMul = def.slowMul;
+    other.slowEndTick = world.tick + def.durationTicks + p.stats.snareBonusTicks;
+    other.slowMul = Math.max(0.25, def.slowMul - p.stats.snareSlowBonus);
   }
 }
 
@@ -416,11 +418,13 @@ export function stepChargeContact(world: World): void {
 
       p.dashHits.push(other.id);
       breakStealth(world, other);
-      applyDamage(world, other, move.damage * damageMultiplier(p, world.tick), p.id);
+      const impact = move.damage + p.stats.chargeBonusDamage;
+      applyDamage(world, other, impact * damageMultiplier(p, world.tick), p.id);
 
-      if (d > 1e-4 && move.knockback > 0) {
-        other.vx += (dx / d) * move.knockback;
-        other.vy += (dy / d) * move.knockback;
+      const knockback = move.knockback + p.stats.chargeBonusKnockback;
+      if (d > 1e-4 && knockback > 0) {
+        other.vx += (dx / d) * knockback;
+        other.vy += (dy / d) * knockback;
       }
     }
   }
@@ -555,6 +559,20 @@ export function killPlayer(world: World, victim: PlayerState, killerId: number):
     killer.kills += 1;
     killer.score += SCORE_PER_KILL;
     grantXp(world, killer.id, XP_PER_KILL);
+
+    // Cecha klasy: eliminacja odnawia SZTUCZKĘ.
+    //
+    // Pomiar pokazał, dlaczego to jest potrzebne akurat tutaj. Widmo dociera
+    // do pierwszej trójki tak samo często jak Łowca (29% vs 31%), ale wygrywa
+    // trzy razy rzadziej — czyli przegrywa nie rundę, tylko jej koniec.
+    // W finałowym starciu nie ma się gdzie schować, a Cień odnawia się 14 s,
+    // więc klasa oparta na zaskoczeniu wchodzi w decydujące 30 sekund bez
+    // swojego jedynego narzędzia. Reset po eliminacji daje jej te 30 sekund
+    // z powrotem i nagradza dokładnie to, do czego jest zbudowana — zamiast
+    // podnosić jej obrażenia w otwartym polu, którego i tak nie ma wygrywać.
+    if (getClass(killer.classId).trickResetOnKill && killer.alive) {
+      killer.cdTrick = world.tick;
+    }
   }
 
   world.events.push({

@@ -104,7 +104,9 @@ export function applyMovement(
 
 export function speedMultiplier(p: PlayerState, tick: number): number {
   let mul = 1;
-  if (tick < p.stealthEndTick) mul *= STEALTH_SPEED_MUL;
+  // Ukrycie samo w sobie przyspiesza (to jest narzędzie zrywania kontaktu,
+  // nie skradania), a Czajenie dokłada do tego swoje.
+  if (tick < p.stealthEndTick) mul *= STEALTH_SPEED_MUL * p.stats.stealthSpeedMul;
   if (tick < p.speedBuffEndTick) mul *= PICKUP_SPEED_MUL;
   // Impet — ulepszenie: przyspieszenie tuż po użyciu slotu RUCH.
   if (tick < p.impetusEndTick) mul *= p.stats.impetusMul;
@@ -166,7 +168,7 @@ export function tryStartMove(
     p.y = ownDecoy.y;
     p.vx = 0;
     p.vy = 0;
-    p.cdMove = tick + Math.round(move.cooldownTicks * p.stats.cooldownMul);
+    p.cdMove = tick + moveCooldown(p, move.cooldownTicks);
     clampToArena(p);
     return true;
   }
@@ -187,12 +189,24 @@ export function tryStartMove(
   p.dashDirY = dy;
   p.facing = Math.atan2(dy, dx);
   p.dashEndTick = tick + move.durationTicks;
-  p.cdMove = tick + Math.round(move.cooldownTicks * p.stats.cooldownMul);
+  p.cdMove = tick + moveCooldown(p, move.cooldownTicks);
   p.dashHits.length = 0;
   if (p.stats.impetusTicks > 0) {
     p.impetusEndTick = tick + move.durationTicks + p.stats.impetusTicks;
   }
   return true;
+}
+
+/**
+ * Odnowienie slotu RUCH.
+ *
+ * Poza wspólnym `cooldownMul` działa tu drugi, klasowy mnożnik (Przeskok).
+ * Osobny, bo ma przyspieszać wyłącznie Mgnienie — gdyby wpadł do wspólnego,
+ * skracałby też Cień i Rozdarcie, a wtedy Widmo nie zyskiwałoby mobilności,
+ * tylko wszystko naraz.
+ */
+function moveCooldown(p: PlayerState, base: number): number {
+  return Math.round(base * p.stats.cooldownMul * p.stats.moveCooldownMul);
 }
 
 function approach(current: number, target: number, maxDelta: number): number {

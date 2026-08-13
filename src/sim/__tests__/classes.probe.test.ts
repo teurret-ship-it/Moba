@@ -24,7 +24,11 @@ interface Tally {
 }
 
 function emptyTally(): Tally {
-  const zero = () => ({ lowca: 0, kolos: 0, widmo: 0 }) as Record<ClassId, number>;
+  // Budowane z listy klas, nie wypisane ręcznie: przy dokładaniu czwartej
+  // zapomniana pozycja dawała NaN w każdej kolumnie i sonda przestawała
+  // cokolwiek mierzyć, zamiast głośno paść.
+  const zero = () =>
+    Object.fromEntries(CLASS_IDS.map((id) => [id, 0])) as Record<ClassId, number>;
   return { wins: zero(), played: zero(), kills: zero(), survival: zero() };
 }
 

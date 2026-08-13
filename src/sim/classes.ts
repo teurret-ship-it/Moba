@@ -22,11 +22,11 @@ import { TICK_HZ } from './constants.ts';
  * a nie wygodą.
  */
 
-export type ClassId = 'lowca' | 'kolos' | 'widmo';
+export type ClassId = 'lowca' | 'kolos' | 'widmo' | 'kuglarz';
 
-export type MoveAbility = 'skok' | 'szarza' | 'mgnienie';
-export type TrickAbility = 'cien' | 'tarcza';
-export type PowerAbility = 'salwa' | 'fala' | 'rozdarcie';
+export type MoveAbility = 'skok' | 'szarza' | 'mgnienie' | 'zamiana';
+export type TrickAbility = 'cien' | 'tarcza' | 'zwod';
+export type PowerAbility = 'salwa' | 'fala' | 'rozdarcie' | 'sidla';
 
 export interface ClassDef {
   id: ClassId;
@@ -50,22 +50,28 @@ export const ABILITY_NAMES: Record<MoveAbility | TrickAbility | PowerAbility, st
   skok: 'Skok',
   szarza: 'Szarża',
   mgnienie: 'Mgnienie',
+  zamiana: 'Zamiana',
   cien: 'Cień',
   tarcza: 'Tarcza',
+  zwod: 'Zwód',
   salwa: 'Salwa',
   fala: 'Fala',
   rozdarcie: 'Rozdarcie',
+  sidla: 'Sidła',
 };
 
 export const ABILITY_GLYPHS: Record<MoveAbility | TrickAbility | PowerAbility, string> = {
   skok: '➤',
   szarza: '⏵',
   mgnienie: '⇢',
+  zamiana: '⇄',
   cien: '◍',
   tarcza: '❖',
+  zwod: '⧉',
   salwa: '⁙',
   fala: '✸',
   rozdarcie: '✦',
+  sidla: '❋',
 };
 
 export const CLASSES: Record<ClassId, ClassDef> = {
@@ -90,7 +96,7 @@ export const CLASSES: Record<ClassId, ClassDef> = {
     id: 'kolos',
     name: 'Kolos',
     tagline: 'Wchodzi pierwszy i wychodzi ostatni. Powolny, ale nie do zdarcia.',
-    maxHp: 130,
+    maxHp: 120,
     speed: 8.2,
     attackRange: 5.5,
     attackDamage: 6.0,
@@ -114,9 +120,31 @@ export const CLASSES: Record<ClassId, ClassDef> = {
     trick: 'cien',
     power: 'rozdarcie',
   },
+
+  // Nie walczy o pozycję — walczy o to, gdzie przeciwnik myśli, że jesteś.
+  // Cała trójka umiejętności działa razem: stawiasz kopię, wróg bije w nią,
+  // ty zamieniasz się z nią miejscami i lądujesz mu za plecami.
+  kuglarz: {
+    id: 'kuglarz',
+    name: 'Kuglarz',
+    tagline: 'Nie tam, gdzie go widzisz. Stawia kopię i zamienia się z nią miejscami.',
+    // Jedyna klasa bez mocy zadającej obrażenia — Sidła kontrolują, ale nie
+    // zabijają. Rekompensatą jest najwyższe obrażenie na sekundę z auto-ataku,
+    // co spina się z jej własnym kitem: spowolniony przeciwnik nie ucieknie
+    // przed ciągłym ostrzałem. Bez tego Kuglarz miał 0,35 eliminacji na
+    // postać przy ~1,0 u pozostałych.
+    maxHp: 105,
+    speed: 9.8,
+    attackRange: 6.5,
+    attackDamage: 6.6,
+    attackCooldownTicks: Math.round(0.46 * TICK_HZ),
+    move: 'zamiana',
+    trick: 'zwod',
+    power: 'sidla',
+  },
 };
 
-export const CLASS_IDS: readonly ClassId[] = ['lowca', 'kolos', 'widmo'];
+export const CLASS_IDS: readonly ClassId[] = ['lowca', 'kolos', 'widmo', 'kuglarz'];
 
 export function getClass(id: ClassId): ClassDef {
   return CLASSES[id] ?? CLASSES.lowca;
@@ -152,6 +180,16 @@ export const MOVE_ABILITY = {
     damage: 0,
     knockback: 0,
   },
+  // Zamiana bez postawionego Zwodu jest krótkim skokiem — umiejętność ma
+  // zawsze coś robić, inaczej przycisk kłamie. Z Zwodem zamienia miejscami
+  // i wtedy zasięg jest dowolny, co obsługuje `combat.ts`, nie kinematyka.
+  zamiana: {
+    cooldownTicks: Math.round(5 * TICK_HZ),
+    durationTicks: Math.round(0.14 * TICK_HZ),
+    speed: 40,
+    damage: 0,
+    knockback: 0,
+  },
 } as const;
 
 export const TRICK_ABILITY = {
@@ -163,7 +201,14 @@ export const TRICK_ABILITY = {
     cooldownTicks: Math.round(12 * TICK_HZ),
     durationTicks: Math.round(5 * TICK_HZ),
     /** Ile obrażeń pochłania, zanim pęknie. */
-    absorb: 40,
+    absorb: 34,
+  },
+  // Zwód stoi nieruchomo i wygląda dokładnie jak właściciel. Dla botów jest
+  // nieodróżnialny od gracza — i o to chodzi.
+  zwod: {
+    cooldownTicks: Math.round(13 * TICK_HZ),
+    durationTicks: Math.round(6 * TICK_HZ),
+    hp: 45,
   },
 } as const;
 
@@ -193,5 +238,15 @@ export const POWER_ABILITY = {
     halfAngle: Math.PI * 0.42,
     damage: 34,
     ambushMultiplier: 2.0,
+  },
+  // Sidła nie zadają obrażeń — spowalniają. To jest narzędzie kontroli:
+  // pozwala uciec albo dogonić, ale nikogo samo nie zabija.
+  sidla: {
+    cooldownTicks: Math.round(11 * TICK_HZ),
+    windupTicks: Math.round(0.2 * TICK_HZ),
+    radius: 8.0,
+    /** Mnożnik prędkości dla złapanych. */
+    slowMul: 0.55,
+    durationTicks: Math.round(2.6 * TICK_HZ),
   },
 } as const;

@@ -34,6 +34,7 @@ const CLASS_SIZE: Record<ClassId, number> = {
   lowca: 2.5,
   kolos: 3.3,
   widmo: 2.2,
+  kuglarz: 2.4,
 };
 
 const CAMERA_HEIGHT = 33;
@@ -63,6 +64,7 @@ export class ArenaRenderer {
   private arena: ArenaObjects;
   private players = new Map<number, PlayerVisual>();
   private pickupPool: THREE.Sprite[] = [];
+  private decoyPool: Array<{ sprite: THREE.Sprite; marker: THREE.Mesh }> = [];
   private cameraTarget = new THREE.Vector3(0, 0, 0);
   private shakeAmount = 0;
   private elapsed = 0;
@@ -229,6 +231,7 @@ export class ArenaRenderer {
     );
 
     this.syncObjective(state, dt);
+    this.syncDecoys(state, selfId);
     this.syncPlayers(state, self, selfId, dt);
     this.syncPickups(state);
     this.fx.update(dt);
@@ -268,6 +271,72 @@ export class ArenaRenderer {
     const pulse = 1 + Math.sin(this.objectivePulse * 4) * 0.06;
     this.objectiveRing.scale.setScalar(pulse);
     this.objectiveBeam.material.opacity = 0.35 + Math.sin(this.objectivePulse * 3) * 0.12;
+  }
+
+  /**
+   * Zwody rysowane tak samo jak postacie — ten sam kształt, ten sam kolor.
+   *
+   * Odróżnia je tylko lekkie migotanie i brak paska zdrowia nad głową.
+   * Gdyby były wyraźnie oznaczone, przestałyby być zmyłką; gdyby były
+   * identyczne co do piksela, gracz nie miałby żadnej szansy — a chodzi
+   * o to, żeby dało się je rozpoznać dopiero po chwili obserwacji.
+   */
+  private syncDecoys(state: RenderState, selfId: number): void {
+    for (let i = 0; i < state.decoys.length; i++) {
+      const d = state.decoys[i]!;
+      let entry = this.decoyPool[i];
+      if (!entry) {
+        const sprite = new THREE.Sprite(
+          new THREE.SpriteMaterial({ transparent: true, depthWrite: false }),
+        );
+        // Znacznik pod WŁASNĄ kopią. Zamiana teleportuje dokładnie tutaj,
+        // więc właściciel musi wiedzieć, gdzie wyląduje — bez tego używa
+        // umiejętności na ślepo. Przeciwnik znacznika nie dostaje, więc
+        // zmyłka pozostaje zmyłką.
+        const marker = new THREE.Mesh(
+          new THREE.RingGeometry(1.0, 1.25, 20),
+          new THREE.MeshBasicMaterial({
+            color: 0x9fe6ff,
+            transparent: true,
+            opacity: 0.7,
+            side: THREE.DoubleSide,
+            depthWrite: false,
+          }),
+        );
+        marker.rotation.x = -Math.PI / 2;
+        marker.position.y = 0.12;
+        marker.visible = false;
+        this.scene.add(sprite);
+        this.scene.add(marker);
+        entry = { sprite, marker };
+        this.decoyPool.push(entry);
+      }
+      const sprite = entry.sprite;
+      const mat = sprite.material as THREE.SpriteMaterial;
+      const tex = getCharacterTexture(d.colorIndex, d.classId);
+      if (mat.map !== tex) {
+        mat.map = tex;
+        mat.needsUpdate = true;
+      }
+      const size = CLASS_SIZE[d.classId] ?? 2.5;
+      sprite.scale.set(size, size, 1);
+      sprite.position.set(d.x, size / 2, -d.y);
+      // Migotanie zdradza kopię dopiero temu, kto się jej przygląda.
+      mat.opacity = 0.86 + Math.sin(this.elapsed * 9 + d.id) * 0.1;
+      sprite.visible = true;
+
+      const isOwn = d.ownerId === selfId;
+      entry.marker.visible = isOwn;
+      if (isOwn) {
+        entry.marker.position.set(d.x, 0.12, -d.y);
+        const pulse = 1 + Math.sin(this.elapsed * 5) * 0.08;
+        entry.marker.scale.setScalar(pulse);
+      }
+    }
+    for (let i = state.decoys.length; i < this.decoyPool.length; i++) {
+      this.decoyPool[i]!.sprite.visible = false;
+      this.decoyPool[i]!.marker.visible = false;
+    }
   }
 
   private syncPlayers(
@@ -553,7 +622,15 @@ export class ArenaRenderer {
       this.scene.remove(sprite);
       (sprite.material as THREE.SpriteMaterial).dispose();
     }
+    for (const entry of this.decoyPool) {
+      this.scene.remove(entry.sprite);
+      this.scene.remove(entry.marker);
+      (entry.sprite.material as THREE.SpriteMaterial).dispose();
+      entry.marker.geometry.dispose();
+      (entry.marker.material as THREE.Material).dispose();
+    }
     this.pickupPool = [];
+    this.decoyPool = [];
     this.fx.dispose();
     this.arena.dispose();
     this.renderer.dispose();

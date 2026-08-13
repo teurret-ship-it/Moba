@@ -211,6 +211,22 @@ export class Game {
           this.renderer.fx.shield(e.x, e.y, true);
           this.playAt('shieldUp', e.x, e.y, self, snapshot.tick);
           break;
+        case 'decoySpawn':
+          this.renderer.fx.stealth(e.x, e.y, true);
+          this.playAt('stealthIn', e.x, e.y, self, snapshot.tick);
+          break;
+        case 'decoyBreak':
+          this.renderer.fx.stealth(e.x, e.y, false);
+          this.playAt('shieldBreak', e.x, e.y, self, snapshot.tick);
+          break;
+        case 'swap':
+          this.renderer.fx.dash(e.x, e.y, this.colors.get(e.player) ?? 0);
+          this.playAt('blink', e.x, e.y, self, snapshot.tick);
+          break;
+        case 'snare':
+          this.renderer.fx.burst(e.x, e.y, e.radius, this.colors.get(e.player) ?? 0);
+          this.playAt('shieldUp', e.x, e.y, self, snapshot.tick);
+          break;
         case 'levelUp': {
           const me = snapshot.players.find((p) => p.id === e.player);
           if (me) this.renderer.fx.levelUp(me.x, me.y);
@@ -409,6 +425,7 @@ export class Game {
     this.hud.setDebug([
       `fps ${avgFps.toFixed(0)}  najgorsza klatka ${this.worstFrameMs.toFixed(1)} ms`,
       `tick ${tick}  snapshoty ${transport.stats.snapshotsReceived}  bufor ${this.buffer.size}`,
+      `w kadrze: gracze ${this.latestSnapshot?.players.length ?? 0}  kopie ${this.latestSnapshot?.decoys.length ?? 0}  dropy ${this.latestSnapshot?.pickups.length ?? 0}`,
       `snapshot ${transport.stats.lastSnapshotBytes} B  (~${(transport.stats.lastSnapshotBytes * 15 / 1024).toFixed(1)} kB/s)`,
       `mecz ${(matchBytes / 1024).toFixed(0)} kB  prognoza ${(projectedPerMatch / 1024 / 1024).toFixed(2)} MB / 4 min`,
       `budżet 1,5 MB ${projectedPerMatch < 1.5 * 1024 * 1024 ? 'OK' : 'PRZEKROCZONY'}`,

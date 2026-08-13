@@ -34,6 +34,12 @@ export class Predictor {
   /** Teren odtworzony z ziarna — musi być identyczny jak na serwerze. */
   private obstacles: readonly Obstacle[] = [];
   private terrainSeed: number | null = null;
+  /**
+   * Pozycja własnego Zwodu. Predykcja nie zna całego świata, ale własną
+   * kopię zna zawsze — dzięki temu Zamiana pozostaje przewidywalna, mimo
+   * że jest teleportem o dowolnym zasięgu.
+   */
+  private ownDecoy: { x: number; y: number } | null = null;
 
   /** Ostatnia zarejestrowana rozbieżność predykcji — do overlayu debug. */
   lastError = 0;
@@ -55,6 +61,8 @@ export class Predictor {
       this.obstacles = generateTerrain(snapshot.seed);
     }
 
+    this.ownDecoy = self.decoy ? { x: self.decoy.x, y: self.decoy.y } : null;
+
     const beforeX = this.state?.x ?? self.x;
     const beforeY = this.state?.y ?? self.y;
 
@@ -66,7 +74,7 @@ export class Predictor {
     let tick = snapshot.tick;
     for (const input of this.pending) {
       tick++;
-      tryStartMove(this.state, input, tick);
+      tryStartMove(this.state, input, tick, this.ownDecoy);
       applyMovement(this.state, input, tick, this.obstacles);
     }
 
@@ -94,7 +102,7 @@ export class Predictor {
   predict(input: InputFrame): void {
     if (!this.state) return;
     this.lastServerTick++;
-    tryStartMove(this.state, input, this.lastServerTick);
+    tryStartMove(this.state, input, this.lastServerTick, this.ownDecoy);
     applyMovement(this.state, input, this.lastServerTick, this.obstacles);
   }
 
@@ -130,6 +138,7 @@ export class Predictor {
     this.lastServerTick = 0;
     this.terrainSeed = null;
     this.obstacles = [];
+    this.ownDecoy = null;
   }
 }
 
@@ -172,6 +181,9 @@ function fromSelfView(self: SelfView): PlayerState {
     cdTrick: self.cdTrick,
     cdPower: self.cdPower,
     cdAttack: 0,
+
+    slowEndTick: self.slowEndTick,
+    slowMul: self.slowMul,
 
     xp: self.xp,
     level: self.level,

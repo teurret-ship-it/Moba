@@ -36,8 +36,17 @@ przy jednej ręce na telefonie to warunek, nie wygoda.
 | Klasa | Sylwetka | RUCH | SZTUCZKA | MOC |
 |---|---|---|---|---|
 | **Łowca** | koło, 100 HP | ➤ Skok | ◍ Cień | ⁙ Salwa — 3 strzały z dystansu |
-| **Kolos** | sześciokąt, 130 HP | ⏵ Szarża — tratuje i odrzuca | ❖ Tarcza — pochłania 40 obrażeń | ✸ Fala — wybuch dookoła |
-| **Widmo** | grot, 95 HP | ⇢ Mgnienie — teleport | ◍ Cień | ✦ Rozdarcie — stożek, z ukrycia ×2 |
+| **Kolos** | sześciokąt, 120 HP | ⏵ Szarża — tratuje i odrzuca | ❖ Tarcza — pochłania 40 obrażeń | ✸ Fala — wybuch dookoła |
+| **Widmo** | grot, 102 HP | ⇢ Mgnienie — teleport przez mur | ◍ Cień | ✦ Rozdarcie — stożek, z ukrycia ×2 |
+| **Kuglarz** | dwa koła, 105 HP | ⇄ Zamiana — zamiana miejsc z kopią | ⧉ Zwód — nieruchoma kopia | ❋ Sidła — obszarowe spowolnienie |
+
+**Kuglarz nie walczy o pozycję — walczy o to, gdzie przeciwnik myśli, że jesteś.**
+Cała jego trójka działa razem: stawiasz kopię, wróg bije w nią, ty zamieniasz się
+z nią miejscami i lądujesz mu za plecami. Kopia jest dla botów nieodróżnialna od
+gracza — konkuruje o ich auto-atak na tych samych zasadach, więc dają się nabrać
+tak samo jak człowiek. Jako jedyna klasa nie ma mocy zadającej obrażenia, więc
+rekompensatą jest najwyższe obrażenie na sekundę z auto-ataku: spowolniony
+przeciwnik nie ucieknie przed ciągłym ostrzałem.
 
 **Ukrycie wycisza auto-atak.** Atak jest automatyczny, więc gracz nie może go
 powstrzymać — a strzelając w ukryciu sam by się zdradzał w chwili podejścia do
@@ -222,7 +231,7 @@ Wobec budżetów z sekcji 4 i 13 planu:
 
 | Metryka | Budżet | Zmierzone |
 |---|---|---|
-| Initial download | ≤15 MB (limit 20) | **~563 kB** (~146 kB gzip) |
+| Initial download | ≤15 MB (limit 20) | **~569 kB** (~148 kB gzip) |
 | Zużycie danych / mecz | ≤1,5 MB (limit 3) | **~0,22 MB** |
 | Snapshot | — | 101 B @ 15 Hz ≈ 1,5 kB/s |
 | Tick symulacji | 15–20 Hz | 20 Hz |
@@ -255,11 +264,12 @@ z sekcji 1. Trzy zmiany, każda wymierzona w zmierzoną przyczynę:
 Tempo mierzone jest teraz na **24 seedach**, a próg dotyczy dziesiątego
 percentyla, nie minimum: pojedynczy przebieg, w którym wszystko zbiegło się
 naraz, jest ogonem rozkładu, a nie wadą formatu. Stan obecny:
-**p10 141 s, mediana 165 s, maks. 240 s**.
+**p10 149 s, mediana 191 s, maks. 240 s** — mediana po raz pierwszy mieści się
+w przedziale 3–6 minut z sekcji 1.
 
 Druga sonda, `classes.probe`, pilnuje równowagi klas na **120 rundach**.
-Współczynniki zwycięstw (1,0 = uczciwy udział): **Łowca 1,15 / Kolos 1,12 /
-Widmo 0,74**.
+Współczynniki zwycięstw (1,0 = uczciwy udział): **Łowca 1,38 / Kolos 1,25 /
+Widmo 0,46 / Kuglarz 0,93**.
 
 > Próba jest duża celowo. Przy 60 rundach na klasę wypada ~20 zwycięstw,
 > a szum Poissona na takiej liczbie to ±0,22 na współczynniku — strojenie

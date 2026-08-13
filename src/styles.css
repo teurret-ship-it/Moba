@@ -705,7 +705,9 @@ body {
 
 .class-pick {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  /* Cztery klasy w dwóch rzędach: przy 390 px szerokości cztery kafelki
+     obok siebie zeszłyby poniżej progu dotyku. */
+  grid-template-columns: repeat(2, 1fr);
   gap: 8px;
   margin-bottom: 18px;
 }

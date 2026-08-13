@@ -108,6 +108,9 @@ export function speedMultiplier(p: PlayerState, tick: number): number {
   if (tick < p.speedBuffEndTick) mul *= PICKUP_SPEED_MUL;
   // Impet — ulepszenie: przyspieszenie tuż po użyciu slotu RUCH.
   if (tick < p.impetusEndTick) mul *= p.stats.impetusMul;
+  // Sidła — spowolnienie. Mnożone na końcu, więc nie da się go „przebić"
+  // dropem prędkości do zera efektu.
+  if (tick < p.slowEndTick) mul *= p.slowMul;
   return mul;
 }
 
@@ -137,7 +140,17 @@ export function clampToArena(p: PlayerState): void {
  * Szarży dolicza serwer — klient przewiduje, gdzie postać wyląduje, nie
  * kogo po drodze rozjedzie.
  */
-export function tryStartMove(p: PlayerState, input: InputFrame, tick: number): boolean {
+export function tryStartMove(
+  p: PlayerState,
+  input: InputFrame,
+  tick: number,
+  /**
+   * Pozycja własnego Zwodu, jeśli stoi. Podawana osobno, bo predykcja
+   * klienta nie zna całego świata — ale własną kopię zna zawsze, więc
+   * Zamiana pozostaje w pełni przewidywalna.
+   */
+  ownDecoy?: { x: number; y: number } | null,
+): boolean {
   if (!p.alive) return false;
   if (!input.dash) return false;
   if (tick < p.cdMove) return false;
@@ -145,6 +158,18 @@ export function tryStartMove(p: PlayerState, input: InputFrame, tick: number): b
 
   const cls = getClass(p.classId);
   const move = MOVE_ABILITY[cls.move];
+
+  // Zamiana z postawionym Zwodem: teleport na jego miejsce, niezależnie od
+  // odległości. To nie jest ruch ciągły, więc nie ma czasu trwania ani pędu.
+  if (cls.move === 'zamiana' && ownDecoy) {
+    p.x = ownDecoy.x;
+    p.y = ownDecoy.y;
+    p.vx = 0;
+    p.vy = 0;
+    p.cdMove = tick + Math.round(move.cooldownTicks * p.stats.cooldownMul);
+    clampToArena(p);
+    return true;
+  }
 
   let dx = input.moveX;
   let dy = input.moveY;

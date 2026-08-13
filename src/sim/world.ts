@@ -94,6 +94,8 @@ export function createWorld(opts: CreateWorldOptions): World {
       nextRadius: ZONE_START_RADIUS,
       shrinking: false,
     },
+    decoys: [],
+    nextDecoyId: 1,
     objective: createObjective(),
     nextPickupId: 1,
     nextPickupSpawnTick: WARMUP_TICKS + PICKUP_SPAWN_INTERVAL_TICKS,
@@ -181,6 +183,9 @@ export function createPlayer(a: CreatePlayerArgs): PlayerState {
     cdTrick: 0,
     cdPower: 0,
     cdAttack: 0,
+
+    slowEndTick: -1,
+    slowMul: 1,
 
     speedBuffEndTick: -1,
     damageBuffEndTick: -1,

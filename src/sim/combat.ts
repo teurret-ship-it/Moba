@@ -76,6 +76,18 @@ export function stepAutoAttacks(world: World): void {
     if (isStealthed(p, world.tick)) continue;
 
     const target = findAttackTarget(world, p);
+    const decoyHit = findDecoyTarget(world, p, p.stats.attackRange);
+
+    // Zwód konkuruje z graczami o uwagę na tych samych zasadach: liczy się
+    // odległość. Gdyby był traktowany inaczej, przestałby zmyłką być.
+    const targetDist = target ? Math.hypot(target.x - p.x, target.y - p.y) : Infinity;
+    if (decoyHit && decoyHit.dist < targetDist) {
+      p.cdAttack = world.tick + p.stats.attackCooldownTicks;
+      p.facing = Math.atan2(decoyHit.decoy.y - p.y, decoyHit.decoy.x - p.x);
+      decoyHit.decoy.hp -= p.stats.attackDamage * damageMultiplier(p, world.tick);
+      continue;
+    }
+
     if (!target) continue;
 
     p.cdAttack = world.tick + p.stats.attackCooldownTicks;
@@ -102,6 +114,31 @@ export function tryStartTrick(world: World, p: PlayerState, input: InputFrame): 
     // liczy się podwójnie dla Rozdarcia.
     p.ambushReady = true;
     world.events.push({ type: 'stealthIn', player: p.id, x: p.x, y: p.y, tick: world.tick });
+    return;
+  }
+
+  if (trick === 'zwod') {
+    const def = TRICK_ABILITY.zwod;
+    // Jeden Zwód naraz — poprzedni znika. Inaczej Kuglarz zapełniłby arenę
+    // kopiami i przestałoby to być zmyłką, a stało się ścianą.
+    for (let i = world.decoys.length - 1; i >= 0; i--) {
+      if (world.decoys[i]!.ownerId === p.id) world.decoys.splice(i, 1);
+    }
+    world.decoys.push({
+      id: world.nextDecoyId++,
+      ownerId: p.id,
+      // Kopia staje tam, gdzie stoisz — więc postawienie jej jest zawsze
+      // zobowiązaniem: zdradza miejsce, w którym byłeś.
+      x: p.x,
+      y: p.y,
+      hp: def.hp,
+      maxHp: def.hp,
+      colorIndex: p.colorIndex,
+      classId: p.classId,
+      endTick: world.tick + def.durationTicks,
+    });
+    p.cdTrick = world.tick + Math.round(def.cooldownTicks * p.stats.cooldownMul);
+    world.events.push({ type: 'decoySpawn', player: p.id, x: p.x, y: p.y, tick: world.tick });
     return;
   }
 
@@ -144,10 +181,9 @@ export function tryStartPower(world: World, p: PlayerState, input: InputFrame): 
     return;
   }
 
-  const windup =
-    power === 'fala' ? POWER_ABILITY.fala.windupTicks : POWER_ABILITY.rozdarcie.windupTicks;
-  const cooldown =
-    power === 'fala' ? POWER_ABILITY.fala.cooldownTicks : POWER_ABILITY.rozdarcie.cooldownTicks;
+  const def = POWER_ABILITY[power];
+  const windup = def.windupTicks;
+  const cooldown = def.cooldownTicks;
 
   p.powerFireTick = world.tick + windup;
   p.cdPower = world.tick + Math.round(cooldown * p.stats.cooldownMul);
@@ -167,6 +203,7 @@ export function stepPowers(world: World): void {
     const power = getClass(p.classId).power;
     if (power === 'fala') fireBurst(world, p);
     else if (power === 'rozdarcie') fireRend(world, p);
+    else if (power === 'sidla') fireSnare(world, p);
   }
 }
 
@@ -293,6 +330,73 @@ function fireRend(world: World, p: PlayerState): void {
     breakStealth(world, other);
     applyDamage(world, other, def.damage * mul, p.id);
   }
+}
+
+/**
+ * Sidła — obszarowe spowolnienie, bez obrażeń.
+ *
+ * Narzędzie kontroli, nie zabijania: pozwala uciec albo dogonić, ale samo
+ * nikogo nie kładzie. Dlatego nie wybija z ukrycia i nie przerywa niczego —
+ * jedyne, co robi, to odbiera przeciwnikowi wybór, gdzie będzie za sekundę.
+ */
+function fireSnare(world: World, p: PlayerState): void {
+  const def = POWER_ABILITY.sidla;
+  world.events.push({
+    type: 'snare',
+    player: p.id,
+    x: p.x,
+    y: p.y,
+    radius: def.radius,
+    tick: world.tick,
+  });
+
+  for (const other of world.players) {
+    if (other.id === p.id || !other.alive) continue;
+    const d = Math.hypot(other.x - p.x, other.y - p.y);
+    if (d > def.radius) continue;
+    if (!hasLineOfSight(p.x, p.y, other.x, other.y, world.obstacles)) continue;
+
+    other.slowEndTick = world.tick + def.durationTicks;
+    other.slowMul = def.slowMul;
+  }
+}
+
+/** Wygaszanie Zwodów po upływie czasu. */
+export function stepDecoys(world: World): void {
+  for (let i = world.decoys.length - 1; i >= 0; i--) {
+    const d = world.decoys[i]!;
+    const owner = world.players[d.ownerId];
+    // Kopia znika razem z właścicielem — inaczej zostawałaby na mapie
+    // jako duch, którego nikt nie może rozliczyć.
+    if (world.tick >= d.endTick || d.hp <= 0 || !owner || !owner.alive) {
+      world.events.push({ type: 'decoyBreak', x: d.x, y: d.y, tick: world.tick });
+      world.decoys.splice(i, 1);
+    }
+  }
+}
+
+/**
+ * Najbliższy Zwód w zasięgu — cel auto-ataku na równi z graczami.
+ *
+ * To jest cały sens Zwodu: dla atakującego jest nieodróżnialny od postaci,
+ * więc pochłania cios, który miał trafić gdzie indziej.
+ */
+export function findDecoyTarget(
+  world: World,
+  attacker: PlayerState,
+  range: number,
+): { decoy: (typeof world.decoys)[number]; dist: number } | null {
+  let best: (typeof world.decoys)[number] | null = null;
+  let bestDist = range;
+  for (const d of world.decoys) {
+    if (d.ownerId === attacker.id) continue;
+    const dist = Math.hypot(d.x - attacker.x, d.y - attacker.y);
+    if (dist >= bestDist) continue;
+    if (!hasLineOfSight(attacker.x, attacker.y, d.x, d.y, world.obstacles)) continue;
+    bestDist = dist;
+    best = d;
+  }
+  return best ? { decoy: best, dist: bestDist } : null;
 }
 
 /** Obrażenia od Szarży — zadawane każdemu mijanemu wrogowi raz na szarżę. */

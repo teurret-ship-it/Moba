@@ -93,6 +93,10 @@ export interface PlayerState {
   cdPower: number;
   cdAttack: number;
 
+  /** Spowolnienie z Sideł — mnożnik prędkości do wskazanego ticka. */
+  slowEndTick: number;
+  slowMul: number;
+
   // Buffy z dropów
   speedBuffEndTick: number;
   damageBuffEndTick: number;
@@ -136,6 +140,26 @@ export interface BotBrain {
 }
 
 export type BotMood = 'roam' | 'hunt' | 'flee' | 'loot' | 'rezone' | 'core';
+
+/**
+ * Zwód — nieruchoma kopia właściciela.
+ *
+ * Osobny byt, nie gracz: nie porusza się, nie strzela i nie liczy się do
+ * warunku zwycięstwa. Ma za to pozycję, zdrowie i wygląd właściciela, bo
+ * jego jedynym zadaniem jest ściągnąć na siebie cios, który miał trafić
+ * w kogoś innego.
+ */
+export interface Decoy {
+  id: number;
+  ownerId: PlayerId;
+  x: number;
+  y: number;
+  hp: number;
+  maxHp: number;
+  colorIndex: number;
+  classId: ClassId;
+  endTick: number;
+}
 
 export type PickupKind = 'heal' | 'speed' | 'damage';
 
@@ -190,6 +214,10 @@ export type SimEvent =
   | { type: 'supplyWarn'; x: number; y: number; tick: number }
   | { type: 'supplyDrop'; x: number; y: number; tick: number }
   | { type: 'zoneShrink'; radius: number; tick: number }
+  | { type: 'decoySpawn'; player: PlayerId; x: number; y: number; tick: number }
+  | { type: 'decoyBreak'; x: number; y: number; tick: number }
+  | { type: 'swap'; player: PlayerId; x: number; y: number; tick: number }
+  | { type: 'snare'; player: PlayerId; x: number; y: number; radius: number; tick: number }
   | { type: 'objectiveWarn'; x: number; y: number; tick: number }
   | { type: 'objectiveSpawn'; x: number; y: number; tick: number }
   | { type: 'objectiveCaptured'; player: PlayerId; x: number; y: number; tick: number }
@@ -206,6 +234,8 @@ export interface World {
   phase: MatchPhase;
   players: PlayerState[];
   pickups: Pickup[];
+  decoys: Decoy[];
+  nextDecoyId: number;
   zone: ZoneState;
   objective: ObjectiveState;
   nextPickupId: number;

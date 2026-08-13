@@ -9,6 +9,7 @@ import {
 import {
   stepAutoAttacks,
   stepChargeContact,
+  stepDecoys,
   stepPowers,
   stepRegen,
   stepShields,
@@ -17,6 +18,7 @@ import {
 } from './combat.ts';
 import { computeBotInput, createBrain } from './bots.ts';
 import { applyMovement, resolveOverlaps, settleIntoTerrain, tryStartMove } from './movement.ts';
+import { getClass } from './classes.ts';
 import { stepPickups } from './pickups.ts';
 import { stepObjective } from './objective.ts';
 import { botPick, pickUpgrade, stepProgression, stepSurvivalXp } from './progression.ts';
@@ -123,8 +125,22 @@ export class Simulation {
     for (const p of w.players) {
       const input = frames.get(p.id);
       if (!input) continue;
-      if (tryStartMove(p, input, w.tick)) {
-        w.events.push({ type: 'dash', player: p.id, x: p.x, y: p.y, tick: w.tick });
+      const ownDecoy = w.decoys.find((d) => d.ownerId === p.id) ?? null;
+      const isSwap = ownDecoy !== null && getClass(p.classId).move === 'zamiana';
+      const fromX = p.x;
+      const fromY = p.y;
+
+      if (tryStartMove(p, input, w.tick, ownDecoy)) {
+        if (isSwap && ownDecoy) {
+          // ZAMIANA, nie teleport w jedną stronę: kopia przejmuje miejsce,
+          // z którego właśnie zniknąłeś. Bez tego przeciwnik bijący w Zwód
+          // od razu wie, że został oszukany, bo kopia zostaje sama w polu.
+          ownDecoy.x = fromX;
+          ownDecoy.y = fromY;
+          w.events.push({ type: 'swap', player: p.id, x: p.x, y: p.y, tick: w.tick });
+        } else {
+          w.events.push({ type: 'dash', player: p.id, x: p.x, y: p.y, tick: w.tick });
+        }
       }
       tryStartTrick(w, p, input);
       tryStartPower(w, p, input);
@@ -153,6 +169,7 @@ export class Simulation {
     stepPowers(w);
     stepAutoAttacks(w);
     stepShields(w);
+    stepDecoys(w);
 
     // 6. Dropy i zdarzenia mapy.
     stepPickups(w, this.rng);

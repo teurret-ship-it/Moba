@@ -1,6 +1,6 @@
 import { INTERP_DELAY_MS } from '../sim/constants.ts';
 import type { Snapshot, PlayerView } from '../sim/snapshot.ts';
-import type { ObjectiveState, Pickup, ZoneState } from '../sim/types.ts';
+import type { Decoy, ObjectiveState, Pickup, ZoneState } from '../sim/types.ts';
 
 /**
  * Bufor interpolacji (sekcja 7: „klient interpoluje 100 ms wstecz").
@@ -20,6 +20,8 @@ export interface RenderPlayer extends PlayerView {
 export interface RenderState {
   players: RenderPlayer[];
   pickups: Pickup[];
+  /** Zwody nie ruszają się, więc nie ma czego interpolować. */
+  decoys: Decoy[];
   zone: ZoneState;
   objective: ObjectiveState;
   aliveCount: number;
@@ -137,6 +139,7 @@ function toRenderState(a: Snapshot, b: Snapshot | null, t: number): RenderState 
   return {
     players,
     pickups: source.pickups,
+    decoys: source.decoys,
     zone: {
       x: lerp(a.zone.x, source.zone.x, t),
       y: lerp(a.zone.y, source.zone.y, t),

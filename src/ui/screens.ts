@@ -14,7 +14,10 @@ const ABILITY_HINTS: Record<string, string> = {
   skok: 'krótki wyskok — wyjdź z opresji albo dogoń',
   szarza: 'wjeżdżasz w tłum, tratując i odrzucając po drodze',
   mgnienie: 'teleport — nie da się cię trafić w locie',
+  zamiana: 'zamieniasz się miejscami z własną kopią — na dowolny dystans',
   cien: 'znikasz naprawdę: przeciwnik przestaje cię widzieć',
+  zwod: 'stawiasz nieruchomą kopię siebie; wrogowie biją w nią',
+  sidla: 'obszarowe spowolnienie — nie zabija, ale odbiera wybór',
   tarcza: 'bańka, która pochłania obrażenia zamiast ciebie',
   salwa: 'trzy szybkie strzały w jeden cel, z dystansu',
   fala: 'wybuch dookoła — odrzuca i wybija z ukrycia',
@@ -196,6 +199,10 @@ function classMark(id: ClassId): string {
   }
   if (id === 'widmo') {
     return `<svg ${common}><polygon points="17,3 27,17 17,31 7,17" fill="#ba68c8" stroke="#0b0e15" stroke-width="2"/></svg>`;
+  }
+  if (id === 'kuglarz') {
+    // Dwa nachodzące kształty — kopia i oryginał.
+    return `<svg ${common}><circle cx="12" cy="17" r="9" fill="#4db6ac" stroke="#0b0e15" stroke-width="2" opacity="0.55"/><circle cx="21" cy="17" r="9" fill="#4db6ac" stroke="#0b0e15" stroke-width="2"/></svg>`;
   }
   return `<svg ${common}><circle cx="17" cy="17" r="13" fill="#4fc3f7" stroke="#0b0e15" stroke-width="2"/></svg>`;
 }

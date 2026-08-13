@@ -381,6 +381,10 @@ function chooseAbilities(
     ? Math.hypot(target.x - bot.x, target.y - bot.y)
     : Infinity;
 
+  // Uwaga: bot nie ma tu żadnej logiki „rozpoznawania" Zwodu i to jest
+  // celowe. Kopia konkuruje o jego auto-atak na tych samych zasadach co
+  // gracz (`stepAutoAttacks`), więc daje się nabrać tak samo jak człowiek.
+
   // --- Slot MOC ---
   // Każda moc ma inny zasięg i inny moment, w którym warto ją wydać.
   if (world.tick >= bot.cdPower) {
@@ -392,6 +396,12 @@ function chooseAbilities(
     } else if (cls.power === 'salwa') {
       // Salwa opłaca się z dystansu — z bliska bot i tak bije automatem.
       wants = distToTarget < POWER_ABILITY.salwa.range * 0.95;
+    } else if (cls.power === 'sidla') {
+      // Sidła nie zabijają — bot używa ich, gdy ucieka albo goni, czyli
+      // wtedy, gdy liczy się różnica prędkości.
+      wants =
+        distToTarget < POWER_ABILITY.sidla.radius * 0.9 &&
+        (brain.mood === 'flee' || brain.mood === 'hunt');
     } else {
       // Rozdarcie: z bliska, a z ukrycia zawsze — to jest cała zasadzka Widma.
       // Uzbrojona zasadzka jest warta podwójnych obrażeń, więc bot nie
@@ -413,7 +423,19 @@ function chooseAbilities(
     const needsZone = brain.mood === 'rezone';
     let wants = needsZone;
 
-    if (cls.move === 'szarza') {
+    if (cls.move === 'zamiana') {
+      // Zamiana opłaca się tylko z postawioną kopią — i wtedy jest ucieczką
+      // albo natychmiastowym wejściem, zależnie od tego, gdzie kopia stoi.
+      const decoy = world.decoys.find((d) => d.ownerId === bot.id);
+      if (decoy) {
+        const decoyToTarget = target && target.alive
+          ? Math.hypot(target.x - decoy.x, target.y - decoy.y)
+          : Infinity;
+        const escaping = brain.mood === 'flee' && decoyToTarget > distToTarget + 6;
+        const closing = brain.mood === 'hunt' && decoyToTarget < distToTarget - 5;
+        wants ||= escaping || closing;
+      }
+    } else if (cls.move === 'szarza') {
       // Kolos szarżuje DO walki, nie z niej. Ucieczka szarżą to marnotrawstwo,
       // bo jest wolniejsza od Skoku i ciągnie go przez wrogów.
       wants ||= brain.mood === 'hunt' && distToTarget > cls.attackRange && distToTarget < 22;
@@ -433,6 +455,18 @@ function chooseAbilities(
 
   // --- Slot SZTUCZKA ---
   if (world.tick >= bot.cdTrick) {
+    if (cls.trick === 'zwod') {
+      // Kopia ma sens wtedy, gdy jest komu ją podsunąć — i wtedy, gdy
+      // bot ma dokąd się z niej zamienić. Stawianie jej na pustej mapie
+      // to zmarnowane odnowienie.
+      const engaged = distToTarget < cls.attackRange * 2.2;
+      const hasDecoy = world.decoys.some((d) => d.ownerId === bot.id);
+      if (!hasDecoy && engaged && rng.bool(0.35 + 0.5 * brain.skill)) {
+        input.stealth = true;
+      }
+      return;
+    }
+
     if (cls.trick === 'tarcza') {
       // Tarcza ma sens tylko wtedy, gdy coś w nią uderzy. Bot stawia ją,
       // gdy jest w kontakcie i obrywa — nie prewencyjnie na pustej mapie.

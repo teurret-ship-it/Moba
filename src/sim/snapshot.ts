@@ -2,6 +2,7 @@ import { AOI_RADIUS, SNAPSHOT_HZ, TICK_HZ } from './constants.ts';
 import type { ClassId } from './classes.ts';
 import type { UpgradeId } from './upgrades.ts';
 import type {
+  Decoy,
   MatchPhase,
   Pickup,
   PlayerId,
@@ -72,6 +73,11 @@ export interface Snapshot {
   ackSeq: number;
   players: PlayerView[];
   pickups: Pickup[];
+  /**
+   * Zwody podlegają AoI dokładnie tak jak gracze — bo mają udawać graczy.
+   * Kopia widoczna przez pół mapy zdradzałaby się samą widocznością.
+   */
+  decoys: Decoy[];
   zone: ZoneState;
   /**
    * Rdzeń jest informacją GLOBALNĄ — celowo omija AoI.
@@ -105,6 +111,14 @@ export interface SelfView {
   /** Wystawione karty i termin — HUD pokazuje je do wyboru. */
   offer: UpgradeId[];
   offerDeadlineTick: number;
+  slowEndTick: number;
+  slowMul: number;
+  /**
+   * Własny Zwód. Predykcja nie zna całego świata, ale własną kopię zna
+   * zawsze — dzięki temu Zamiana pozostaje przewidywalna, mimo że jest
+   * teleportem o dowolnym zasięgu.
+   */
+  decoy: { x: number; y: number } | null;
   x: number;
   y: number;
   vx: number;
@@ -175,12 +189,15 @@ export function buildSnapshot(world: World, viewerId: PlayerId): Snapshot {
     ackSeq: viewer?.lastAckSeq ?? 0,
     players,
     pickups: pickups.map((p) => ({ ...p })),
+    decoys: world.decoys
+      .filter((d) => d.ownerId === viewerId || Math.hypot(d.x - eyeX, d.y - eyeY) <= aoi)
+      .map((d) => ({ ...d })),
     zone: { ...world.zone },
     objective: { ...world.objective },
     aliveCount: world.players.reduce((n, p) => n + (p.alive ? 1 : 0), 0),
     events: filterEvents(world, viewerId, eyeX, eyeY, aoi),
     winner: world.winner,
-    self: viewer ? toSelfView(viewer) : null,
+    self: viewer ? toSelfView(viewer, world) : null,
   };
 }
 
@@ -207,7 +224,7 @@ function toView(p: PlayerState, tick: number, isSelf: boolean): PlayerView {
   };
 }
 
-function toSelfView(p: PlayerState): SelfView {
+function toSelfView(p: PlayerState, world: World): SelfView {
   return {
     id: p.id,
     classId: p.classId,
@@ -220,6 +237,8 @@ function toSelfView(p: PlayerState): SelfView {
     xpForNext: xpForLevel(p.level),
     offer: [...p.offer],
     offerDeadlineTick: p.offerDeadlineTick,
+    slowEndTick: p.slowEndTick,
+    slowMul: p.slowMul,
     x: p.x,
     y: p.y,
     vx: p.vx,
@@ -238,7 +257,13 @@ function toSelfView(p: PlayerState): SelfView {
     cdPower: p.cdPower,
     kills: p.kills,
     score: p.score,
+    decoy: findOwnDecoy(world, p.id),
   };
+}
+
+function findOwnDecoy(world: World, ownerId: PlayerId): { x: number; y: number } | null {
+  const d = world.decoys.find((x) => x.ownerId === ownerId);
+  return d ? { x: d.x, y: d.y } : null;
 }
 
 /**
@@ -256,6 +281,11 @@ function filterEvents(
   const out: SimEvent[] = [];
   for (const e of world.events) {
     switch (e.type) {
+      case 'decoyBreak':
+        // Rozbicie kopii jest zdarzeniem w świecie, więc podlega AoI —
+        // inaczej pęknięcie Zwodu zdradzałoby, gdzie stał, każdemu na mapie.
+        if (withinAoi(e.x, e.y, eyeX, eyeY, aoi)) out.push(e);
+        break;
       case 'matchOver':
       case 'zoneShrink':
       case 'supplyWarn':
@@ -295,6 +325,9 @@ function filterEvents(
       case 'shieldUp':
       case 'shieldBreak':
       case 'revive':
+      case 'decoySpawn':
+      case 'swap':
+      case 'snare':
         if (e.player === viewerId || withinAoi(e.x, e.y, eyeX, eyeY, aoi)) out.push(e);
         break;
     }
@@ -323,5 +356,9 @@ function withinAoi(x: number, y: number, eyeX: number, eyeY: number, aoi: number
  */
 export function estimateSnapshotBytes(s: Snapshot): number {
   // +6 B na Rdzeń: pozycja i16 ×2, postęp u8, flagi u8.
-  return 10 + s.players.length * 8 + s.pickups.length * 7 + 4 + 6 + s.events.length * 7;
+  // +7 B na Zwód: id u16, właściciel u8, x/y i16, hp u8.
+  return (
+    10 + s.players.length * 8 + s.pickups.length * 7 + s.decoys.length * 7 + 4 + 6 +
+    s.events.length * 7
+  );
 }

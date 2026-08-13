@@ -17,6 +17,7 @@ import { Screens } from '../ui/screens.ts';
 import { Sfx } from '../audio/sfx.ts';
 import { CombatFeedback } from '../ui/feedback.ts';
 import { RecordStore } from './records.ts';
+import { Haptics, SettingsStore } from './settings.ts';
 import { TICK_HZ as SIM_HZ } from '../sim/constants.ts';
 
 /**
@@ -48,6 +49,8 @@ export class Game {
   private readonly sfx = new Sfx();
   private readonly feedback: CombatFeedback;
   private readonly records = new RecordStore();
+  private readonly settings = new SettingsStore();
+  private readonly haptics = new Haptics(this.settings);
   private readonly firstRunHints: HTMLElement;
 
   private transport: LocalTransport | null = null;
@@ -91,6 +94,12 @@ export class Game {
       burst: required(opts.uiRoot, '#btn-burst'),
     });
 
+    // Ustawienia sterowania i odbioru wchodzą w życie od razu, także
+    // w trakcie rundy — przełącznik, który wymaga restartu, w praktyce
+    // nie zostanie użyty.
+    this.applySettings();
+    this.settings.onChange(() => this.applySettings());
+
     window.addEventListener('resize', this.onResize);
     document.addEventListener('visibilitychange', this.onVisibilityChange);
     window.addEventListener('keydown', this.onKeyDown);
@@ -105,12 +114,23 @@ export class Game {
       this.sfx.isMuted,
     );
 
+    this.screens.bindSettings(this.settings);
+
     this.screens.showStart((classId) => {
       // Kontekst audio wolno obudzić tylko z gestu użytkownika — „Graj"
       // jest jedynym pewnym miejscem, przez które przechodzi każdy gracz.
       this.sfx.unlock();
       this.startMatch(undefined, classId);
     });
+  }
+
+  private applySettings(): void {
+    const s = this.settings.current;
+    this.controls.setHandedness(s.handed);
+    this.renderer.setMotionAllowed(this.settings.motionAllowed);
+    // Klasa na <body> przestawia układ HUD-u — logika sterowania nie musi
+    // wiedzieć nic o pikselach, a CSS nic o wejściu.
+    document.body.dataset.handed = s.handed;
   }
 
   startMatch(seed?: number, classId?: ClassId): void {
@@ -182,15 +202,24 @@ export class Game {
           this.renderer.fx.hit(e.x, e.y, e.amount);
           const now = performance.now();
           if (e.target === this.localPlayerId) {
-            this.renderer.shake(0.25);
             this.playAt('hurt', e.x, e.y, self, snapshot.tick);
             this.feedback.addNumber(e.x, e.y, e.amount, 'taken', now);
             // Skąd przyszedł cios. Napastnik bywa poza kadrem, więc bez
             // tego gracz naprawdę nie wie, co go zabiło.
             const src = snapshot.players.find((p) => p.id === e.source);
             if (src && self) {
-              this.feedback.addDamageDirection(Math.atan2(src.y - self.y, src.x - self.x), now);
+              const angle = Math.atan2(src.y - self.y, src.x - self.x);
+              this.feedback.addDamageDirection(angle, now);
+              // Wstrząs wzdłuż wektora ciosu: kamera jest odpychana OD
+              // napastnika, więc sam ruch obrazu mówi, skąd przyszło.
+              this.renderer.shake(0.25, -Math.cos(angle), -Math.sin(angle));
+            } else {
+              this.renderer.shake(0.25);
             }
+            // Trzeci kanał: dłoń. Obraz i dźwięk mogą umknąć — telefon
+            // trzymany w ręce nie umyka. Impuls jest krótki i dławiony,
+            // bo obrywa się kilka razy na sekundę.
+            this.haptics.pulse(e.amount >= 20 ? 26 : 14, 120);
           } else if (e.source === this.localPlayerId) {
             this.playAt('attack', e.x, e.y, self, snapshot.tick);
             this.feedback.addNumber(e.x, e.y, e.amount, 'dealt', now);
@@ -200,6 +229,9 @@ export class Game {
           break;
         }
         case 'kill':
+          // Eliminacja to jedyne zdarzenie warte mocniejszego impulsu —
+          // i jedyne, przy którym na pewno nie zleją się dwa pod rząd.
+          if (e.killer === this.localPlayerId) this.haptics.pulse(34, 200);
           break;
         case 'burst':
           this.renderer.fx.burst(e.x, e.y, e.radius, this.colors.get(e.player) ?? 0);

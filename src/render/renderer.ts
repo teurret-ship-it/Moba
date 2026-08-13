@@ -67,6 +67,10 @@ export class ArenaRenderer {
   private decoyPool: Array<{ sprite: THREE.Sprite; marker: THREE.Mesh }> = [];
   private cameraTarget = new THREE.Vector3(0, 0, 0);
   private shakeAmount = 0;
+  /** Kierunek ciosu — wstrząs idzie wzdłuż niego, nie na oślep. */
+  private shakeDirX = 0;
+  private shakeDirZ = 0;
+  private motionAllowed = true;
   private elapsed = 0;
   private readonly projectionScratch = new THREE.Vector3();
   private objectiveGroup: THREE.Group | null = null;
@@ -190,9 +194,40 @@ export class ArenaRenderer {
     this.arena.setTerrain(obstacles);
   }
 
-  /** Wstrząs kamery — używany przy trafieniu gracza lokalnego. */
-  shake(amount: number): void {
+  /**
+   * Wstrząs kamery — używany przy trafieniu gracza lokalnego.
+   *
+   * Kierunek jest opcjonalny, ale warto go podawać. Wstrząs losowy w obie
+   * strony czyta się jako „coś się stało"; wstrząs zgodny z wektorem ciosu
+   * czyta się jako „dostałeś STAMTĄD" — czyli niesie informację, a nie tylko
+   * energię. Na małym ekranie, gdzie napastnik bywa poza kadrem, to jedyny
+   * kanał, który mówi to bez ikony.
+   */
+  shake(amount: number, dirX = 0, dirY = 0): void {
+    if (!this.motionAllowed) return;
     this.shakeAmount = Math.min(1.2, this.shakeAmount + amount);
+    const len = Math.hypot(dirX, dirY);
+    if (len > 1e-4) {
+      this.shakeDirX = dirX / len;
+      // Świat ma Y w górę, scena ma Z w dół.
+      this.shakeDirZ = -dirY / len;
+    } else {
+      this.shakeDirX = 0;
+      this.shakeDirZ = 0;
+    }
+  }
+
+  /**
+   * Uszanowanie `prefers-reduced-motion` (albo ręcznego przełącznika).
+   *
+   * Wstrząs jest tu wyłącznie warstwą odczucia — każda informacja, którą
+   * niesie, jest też podana inaczej: liczbami obrażeń, łukiem kierunku ciosu
+   * i winietą przy niskim zdrowiu. Można go więc wyłączyć bez utraty
+   * czegokolwiek, co jest potrzebne do gry, i dokładnie tak ma być.
+   */
+  setMotionAllowed(allowed: boolean): void {
+    this.motionAllowed = allowed;
+    if (!allowed) this.shakeAmount = 0;
   }
 
   /**
@@ -577,8 +612,13 @@ export class ArenaRenderer {
     let shakeX = 0;
     let shakeZ = 0;
     if (this.shakeAmount > 0.001) {
-      shakeX = (Math.random() * 2 - 1) * this.shakeAmount;
-      shakeZ = (Math.random() * 2 - 1) * this.shakeAmount;
+      // Składowa kierunkowa (odepchnięcie wzdłuż ciosu) plus resztka szumu,
+      // żeby nie wyglądało jak przesunięcie o wektor. Wygaszanie wykładnicze
+      // zostaje — kamera ma wracać szybko, inaczej traci się czytelność.
+      const jitter = this.shakeAmount * 0.35;
+      const push = this.shakeAmount * 0.9;
+      shakeX = this.shakeDirX * push + (Math.random() * 2 - 1) * jitter;
+      shakeZ = this.shakeDirZ * push + (Math.random() * 2 - 1) * jitter;
       this.shakeAmount *= Math.exp(-9 * dt);
     } else {
       this.shakeAmount = 0;

@@ -971,3 +971,84 @@ body {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ===== Ustawienia sterowania ===== */
+/*
+ * Trzy przełączniki na ekranie startowym. Każdy jest jednym przyciskiem,
+ * który krąży po wartościach — suwak na telefonie wymaga celowania,
+ * a to jest ekran, przez który przechodzi każdy gracz.
+ */
+.settings {
+  display: flex;
+  gap: 8px;
+  margin: 4px 0 14px;
+}
+
+.setting {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 6px;
+  /* Powyżej 48 dp z wytycznych dostępności — przycisk, w który da się
+     trafić kciukiem bez patrzenia. */
+  min-height: 52px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.setting[data-on='1'] {
+  border-color: rgba(79, 195, 247, 0.45);
+  color: var(--text);
+}
+
+.setting-name {
+  opacity: 0.62;
+}
+
+.setting-value {
+  font-size: 13px;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  color: var(--accent);
+}
+
+.setting[data-on='0'] .setting-value {
+  color: var(--muted);
+}
+
+/* ===== Układ dla leworęcznych ===== */
+/*
+ * Odbicie lustrzane całego HUD-u sterowania. Wytyczne do sterowania
+ * dotykowego traktują to jako wymóg, nie opcję: układ „lewy kciuk rusza,
+ * prawy działa" jest założeniem o ręce gracza, a nie faktem o człowieku.
+ * Logika wejścia wie tylko, która połowa ekranu należy do ruchu — reszta
+ * jest tutaj.
+ */
+body[data-handed='left'] #buttons {
+  right: auto;
+  left: calc(var(--safe-left) + 18px);
+  /* Kolejność przycisków też się odbija, żeby duży przycisk MOC został
+     pod kciukiem, a nie po jego zewnętrznej stronie. */
+  direction: rtl;
+}
+
+body[data-handed='left'] #buttons > * {
+  direction: ltr;
+}
+
+body[data-handed='left'] .hint--move {
+  left: auto;
+  right: calc(var(--safe-right) + 14px);
+}
+
+body[data-handed='left'] .hint--buttons {
+  right: auto;
+  left: calc(var(--safe-left) + 14px);
+}

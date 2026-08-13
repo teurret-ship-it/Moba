@@ -8,6 +8,7 @@ import {
 } from '../sim/classes.ts';
 import type { MatchResult } from '../sim/types.ts';
 import type { BeatenRecords, Records } from '../app/records.ts';
+import type { MotionMode, SettingsStore } from '../app/settings.ts';
 import { PLAYER_COLORS } from '../render/textures.ts';
 
 /** Jedno zdanie na umiejętność — czytane raz, przed pierwszą rundą. */
@@ -75,6 +76,56 @@ export class Screens {
 
   get chosenClass(): ClassId {
     return this.selectedClass;
+  }
+
+  /**
+   * Przełączniki sterowania i odbioru.
+   *
+   * Każdy jest jednym przyciskiem, który krąży po wartościach — na telefonie
+   * to jest jedyny układ, który da się obsłużyć kciukiem bez celowania
+   * w suwak. Etykieta zawsze pokazuje stan bieżący, nie akcję: „prawa"
+   * znaczy „teraz prawa", a nie „przełącz na prawą".
+   */
+  bindSettings(settings: SettingsStore): void {
+    const handed = this.start.querySelector<HTMLButtonElement>('#set-handed');
+    const haptics = this.start.querySelector<HTMLButtonElement>('#set-haptics');
+    const motion = this.start.querySelector<HTMLButtonElement>('#set-motion');
+
+    const render = () => {
+      const s = settings.current;
+      setValue(handed, s.handed === 'right' ? 'prawa' : 'lewa', s.handed === 'left');
+      setValue(haptics, s.haptics ? 'tak' : 'nie', s.haptics);
+      const motionLabel = s.motion === 'auto' ? 'auto' : s.motion === 'on' ? 'tak' : 'nie';
+      setValue(motion, motionLabel, s.motion !== 'off');
+      // Przy „auto" warto powiedzieć, co z tego wyszło — inaczej gracz
+      // z włączonym ograniczeniem ruchu w systemie myśli, że wstrząs
+      // jest zepsuty.
+      if (motion && s.motion === 'auto') {
+        motion.title = settings.motionAllowed
+          ? 'System nie prosi o ograniczenie ruchu'
+          : 'System prosi o ograniczenie ruchu — wstrząs wyłączony';
+      }
+    };
+
+    handed?.addEventListener('click', () => {
+      settings.set('handed', settings.current.handed === 'right' ? 'left' : 'right');
+      render();
+    });
+    haptics?.addEventListener('click', () => {
+      settings.set('haptics', !settings.current.haptics);
+      // Potwierdzenie dotykiem w chwili włączania — jedyny sposób, żeby
+      // gracz od razu wiedział, czy jego telefon w ogóle to potrafi.
+      if (settings.current.haptics) navigator.vibrate?.(18);
+      render();
+    });
+    motion?.addEventListener('click', () => {
+      const order: MotionMode[] = ['auto', 'on', 'off'];
+      const next = order[(order.indexOf(settings.current.motion) + 1) % order.length]!;
+      settings.set('motion', next);
+      render();
+    });
+
+    render();
   }
 
   /**
@@ -281,6 +332,14 @@ function classMark(id: ClassId): string {
     return `<svg ${common}><circle cx="12" cy="17" r="9" fill="#4db6ac" stroke="#0b0e15" stroke-width="2" opacity="0.55"/><circle cx="21" cy="17" r="9" fill="#4db6ac" stroke="#0b0e15" stroke-width="2"/></svg>`;
   }
   return `<svg ${common}><circle cx="17" cy="17" r="13" fill="#4fc3f7" stroke="#0b0e15" stroke-width="2"/></svg>`;
+}
+
+function setValue(el: HTMLButtonElement | null, text: string, on: boolean): void {
+  if (!el) return;
+  const value = el.querySelector<HTMLElement>('.setting-value');
+  if (value) value.textContent = text;
+  el.setAttribute('aria-pressed', String(on));
+  el.dataset.on = on ? '1' : '0';
 }
 
 function stat(label: string, value: string): string {

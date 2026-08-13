@@ -7,13 +7,27 @@ import type { InputFrame } from '../sim/types.ts';
  * graniu. Dlatego atak podstawowy jest automatyczny — kciuk obsługuje
  * ruch, a przyciski są wyłącznie dla trzech decyzji, nie dla DPS-u.
  *
- * Gałka jest „pływająca": pojawia się tam, gdzie palec dotknie lewej
- * połowy ekranu. Gałka w stałym miejscu wymaga patrzenia na ekran przy
+ * Gałka jest „pływająca": pojawia się tam, gdzie palec dotknie połowy ekranu
+ * należącej do ruchu. Gałka w stałym miejscu wymaga patrzenia na ekran przy
  * chwytaniu telefonu, a to jest realny koszt na małych urządzeniach.
+ * Porównania obu wariantów dają im podobną użyteczność, z lekką przewagą
+ * pływającej w łatwości nauki — a pierwsze wrażenie jest tu wszystkim.
+ *
+ * Strona ekranu jest przełączalna. Układ „lewy kciuk rusza, prawy działa"
+ * to założenie o ręce gracza, nie fakt o człowieku.
  */
 
-const JOYSTICK_RADIUS = 58;
-const DEAD_ZONE = 6;
+/**
+ * Promień gałki i martwa strefa, obie względem ekranu.
+ *
+ * Wartości stałe w pikselach rozjeżdżają się między telefonem a tabletem,
+ * więc promień jest ułamkiem krótszego boku, przycięty do rozsądnego
+ * przedziału, a martwa strefa jest ułamkiem promienia.
+ */
+const JOYSTICK_RADIUS_FRACTION = 0.16;
+const JOYSTICK_RADIUS_MIN = 50;
+const JOYSTICK_RADIUS_MAX = 74;
+const DEAD_ZONE_FRACTION = 0.12;
 
 export interface ControlsState {
   moveX: number;
@@ -24,6 +38,12 @@ export interface ControlsState {
   joystickBaseY: number;
   joystickKnobX: number;
   joystickKnobY: number;
+}
+
+/** Skalowana promieniowa martwa strefa — patrz `applyDeadZone`. */
+export function applyDeadZone(dist: number, dead: number, radius: number): number {
+  if (dist <= dead) return 0;
+  return Math.min(1, (dist - dead) / (radius - dead));
 }
 
 export class Controls {
@@ -46,6 +66,8 @@ export class Controls {
 
   private seq = 0;
   private joystickPointerId: number | null = null;
+  /** Po której stronie ekranu leży gałka. Prawa ręka = gałka po lewej. */
+  private moveOnLeft = true;
   private keys = new Set<string>();
   private disposers: Array<() => void> = [];
 
@@ -58,6 +80,29 @@ export class Controls {
     this.bindButton(buttons.stealth, () => (this.pendingStealth = true));
     this.bindButton(buttons.burst, () => (this.pendingBurst = true));
     this.bindKeyboard();
+  }
+
+  /**
+   * Zamiana stron dla leworęcznych.
+   *
+   * Zmienia tylko to, która połowa ekranu przyjmuje gałkę — układ przycisków
+   * przestawia CSS. Trwający dotyk jest przerywany, bo po zamianie stron
+   * gałka trzymana w starej połowie sterowałaby czymś, czego już tam nie ma.
+   */
+  setHandedness(handed: 'left' | 'right'): void {
+    const moveOnLeft = handed === 'right';
+    if (moveOnLeft === this.moveOnLeft) return;
+    this.moveOnLeft = moveOnLeft;
+    this.releaseAll();
+  }
+
+  /** Promień gałki dla bieżącego ekranu. */
+  private joystickRadius(): number {
+    const shorter = Math.min(window.innerWidth, window.innerHeight);
+    return Math.max(
+      JOYSTICK_RADIUS_MIN,
+      Math.min(JOYSTICK_RADIUS_MAX, shorter * JOYSTICK_RADIUS_FRACTION),
+    );
   }
 
   /** Buduje ramkę wejścia dla bieżącego ticka i zużywa zdarzenia krawędziowe. */
@@ -116,8 +161,12 @@ export class Controls {
 
   private bindTouch(): void {
     const onDown = (e: PointerEvent) => {
-      // Prawa połowa ekranu należy do przycisków akcji.
-      if (e.clientX > window.innerWidth * 0.55) return;
+      // Druga połowa ekranu należy do przycisków akcji. Granica jest lekko
+      // przesunięta na korzyść gałki: chybiony kciuk częściej ląduje za
+      // blisko środka niż za daleko.
+      const split = window.innerWidth * (this.moveOnLeft ? 0.55 : 0.45);
+      const onMoveSide = this.moveOnLeft ? e.clientX <= split : e.clientX >= split;
+      if (!onMoveSide) return;
       if (this.joystickPointerId !== null) return;
       this.joystickPointerId = e.pointerId;
       this.state.joystickActive = true;
@@ -135,7 +184,10 @@ export class Controls {
       const dy = e.clientY - this.state.joystickBaseY;
       const dist = Math.hypot(dx, dy);
 
-      if (dist < DEAD_ZONE) {
+      const radius = this.joystickRadius();
+      const dead = radius * DEAD_ZONE_FRACTION;
+
+      if (dist <= dead) {
         this.state.moveX = 0;
         this.state.moveY = 0;
         this.state.joystickKnobX = this.state.joystickBaseX;
@@ -143,14 +195,21 @@ export class Controls {
         return;
       }
 
-      const clamped = Math.min(dist, JOYSTICK_RADIUS);
+      const clamped = Math.min(dist, radius);
       const nx = dx / dist;
       const ny = dy / dist;
       this.state.joystickKnobX = this.state.joystickBaseX + nx * clamped;
       this.state.joystickKnobY = this.state.joystickBaseY + ny * clamped;
 
-      // Analogowa siła wychylenia: pełna prędkość dopiero przy krawędzi.
-      const strength = clamped / JOYSTICK_RADIUS;
+      // Skalowana promieniowa martwa strefa.
+      //
+      // Wcześniej siła wychylenia liczyła się jako `dist / promień` z twardym
+      // odcięciem poniżej martwej strefy — czyli tuż za jej krawędzią postać
+      // ruszała od razu z 10% prędkości, a nie od zera. To jest dokładnie ten
+      // uskok, przed którym ostrzegają opisy martwych stref: gałka ma pełny
+      // zakres od 0 do 1 rozciągnięty na drogę OD krawędzi martwej strefy do
+      // krawędzi gałki, a nie od jej środka.
+      const strength = applyDeadZone(dist, dead, radius);
       this.state.moveX = nx * strength;
       // Ekran ma Y w dół, świat ma Y w górę.
       this.state.moveY = -ny * strength;

@@ -59,6 +59,29 @@ w wybranym momencie, a nie dlatego, że wróg wszedł w zasięg.
 natychmiast odnawia Cień*. Powód jest w pomiarze, nie w fikcji — patrz sekcja
 o balansie niżej.
 
+### Sterowanie
+
+Gałka jest **pływająca** — pojawia się tam, gdzie kciuk dotknie swojej połowy
+ekranu. Porównania wariantu pływającego ze stałym dają im podobną użyteczność,
+z lekką przewagą pływającego w łatwości nauki; przy bramce, która mierzy
+pierwsze wrażenie obcych ludzi, to rozstrzyga.
+
+**Martwa strefa jest skalowana promieniowo.** Wcześniej siła wychylenia
+liczyła się jako `odległość / promień` z twardym odcięciem poniżej progu —
+czyli tuż za krawędzią martwej strefy postać ruszała od razu z ~10%
+prędkości zamiast od zera. To jest dokładnie ten uskok, przed którym
+ostrzegają opisy martwych stref: pełny zakres 0..1 ma być rozciągnięty
+**od krawędzi martwej strefy** do krawędzi gałki, a nie od jej środka.
+Promień gałki jest ułamkiem krótszego boku ekranu (przyciętym do przedziału),
+a martwa strefa ułamkiem promienia — wartości stałe w pikselach rozjeżdżają
+się między telefonem a tabletem.
+
+**Układ da się odbić lustrzanie.** „Lewy kciuk rusza, prawy działa" to
+założenie o ręce gracza, nie fakt o człowieku; poradniki sterowania dotykowego
+wymieniają wsparcie dla odbicia jako wymóg. Przełącznik jest na ekranie
+startowym, razem z wibracją i wstrząsem. Przyciski akcji mają 66 i 84 px przy
+wytycznej 48 dp — z zapasem.
+
 ### Progresja w trakcie rundy
 
 Za walkę i przetrwanie zbierasz doświadczenie. Na każdym poziomie dostajesz
@@ -128,6 +151,27 @@ Do tego zatrzymanie obrazu na kilkadziesiąt milisekund przy mocnym ciosie
 (trafienie ma „ważyć") i stała obwódka przy niskim zdrowiu — obwódka mówi
 „jesteś o krok od śmierci", a błysk mówi „właśnie oberwałeś"; to dwie różne
 informacje i mają dwa różne sygnały.
+
+**Trzy kanały naraz.** Opisy „game feel" zgadzają się co do jednego: sygnał
+zwrotny działa wtedy, gdy trafia w oczy, uszy i dłonie jednocześnie. Dwa
+pierwsze były od początku (efekty i syntezowany dźwięk), trzeciego nie było.
+Trafienie daje teraz krótki impuls wibracji — dławiony, bo obrywa się kilka
+razy na sekundę, i przełączalny, bo część ludzi wibracji nie znosi, a część
+jej nie czuje. Haptyka jest dodatkiem do obrazu i dźwięku, nigdy jedynym
+nośnikiem informacji.
+
+**Wstrząs kamery ma kierunek.** Wcześniej był losowy w obie strony i mówił
+tylko „coś się stało". Teraz idzie wzdłuż wektora ciosu — kamera jest
+odpychana OD napastnika — więc sam ruch obrazu niesie tę samą informację, co
+łuk na krawędzi. Wygaszanie zostało wykładnicze: kamera musi wracać szybko,
+inaczej traci się czytelność. Całość respektuje `prefers-reduced-motion`
+i ma własny przełącznik, który nadpisuje ustawienie systemowe w obie strony.
+
+**Czego świadomie nie wziąłem:** prawdziwego hitstopu w rozumieniu bijatyk,
+czyli zatrzymania *symulacji*. Symulacja jest autorytatywna i ma stały krok
+czasowy, a w Fazie 1 stanie na serwerze — zatrzymanie jej po stronie klienta
+to rozjazd stanu. Zatrzymywana jest wyłącznie klatka obrazu (do 120 ms),
+podczas gdy świat leci dalej.
 
 ### Dźwięk
 
@@ -433,3 +477,33 @@ ale **człon Z jest tu najsłabszy i to jest założenie, nie decyzja.**
 Bramka wyjścia z Fazy 0: **5 obcych osób gra ≥3 rundy z rzędu bez proszenia.**
 Jeśli nie — wracasz do sekcji 1, nie idziesz do Fazy 1. To jest najważniejsza
 bramka w całym planie i najczęściej pomijana.
+
+---
+
+## Źródła
+
+Iteracja 11 (sterowanie i odczucie) nie wyszła z mojego gustu — poniżej to,
+z czego wyszła. Każda pozycja odpowiada konkretnej zmianie opisanej wyżej.
+
+- [Doing Thumbstick Dead Zones Right — Josh Sutphin](https://joshsutphin.com/blog/doing-thumbstick-dead-zones-right.html)
+  oraz [Minimuino/thumbstick-deadzones](https://github.com/Minimuino/thumbstick-deadzones)
+  — skalowana promieniowa martwa strefa i uskok, który powstaje bez niej.
+- [Touch Input Best Practices for Unity Mobile Games](https://scriptsforunity.com/blog/touch-input-best-practices-unity/)
+  — rozmiar martwej strefy względem ekranu, wymóg odbicia lustrzanego układu,
+  ograniczenie gałki do jednej połowy ekranu.
+- [Interpreting Analog Sticks — Hypersect](http://blog.hypersect.com/interpreting-analog-sticks/)
+  — dlaczego wychylenie liczy się promieniowo, a nie po osiach.
+- [Maximizing Game Feel in Action Game Development](https://salivity.github.io/game-development/article/maximizing-game-feel-in-action-game-development)
+  — hitstop rzędu 40–80 ms, wstrząs zgodny z wektorem uderzenia, wygaszanie
+  wykładnicze dla zachowania czytelności.
+- [The „Juice" Factor: Designing Game Feel](https://hackread.com/the-juice-factor-designing-game-feel/)
+  — sygnał zwrotny ma trafiać w oczy, uszy i dłonie jednocześnie.
+- [Haptic Feedback for Web Apps with the Vibration API](https://blog.openreplay.com/haptic-feedback-for-web-apps-with-the-vibration-api/)
+  — krótkie impulsy, przełącznik do uszanowania, haptyka jako dodatek,
+  nie jedyny kanał.
+- [Touch target size — Android Accessibility Help](https://support.google.com/accessibility/android/answer/7101858?hl=en)
+  i [Material Design: Accessibility](https://m1.material.io/usability/accessibility.html)
+  — minimum 48 × 48 dp dla elementów dotykowych.
+- [Design accessible animation and movement](https://blog.pope.tech/2025/12/08/design-accessible-animation-and-movement/)
+  — `prefers-reduced-motion` i zasada, że informacja niesiona przez ruch musi
+  być podana także inaczej.

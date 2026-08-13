@@ -131,6 +131,24 @@
             </div>
           </div>
 
+          <!-- Ustawienia sterowania. Trzy przełączniki, wszystkie wynikające
+               z wytycznych, nie z gustu — uzasadnienia w src/app/settings.ts.
+               Stoją na ekranie startowym, bo tam gracz jeszcze patrzy. -->
+          <div class="settings" id="settings">
+            <button id="set-handed" class="setting" type="button" aria-pressed="false">
+              <span class="setting-name">Ręka</span>
+              <span class="setting-value">prawa</span>
+            </button>
+            <button id="set-haptics" class="setting" type="button" aria-pressed="true">
+              <span class="setting-name">Wibracja</span>
+              <span class="setting-value">tak</span>
+            </button>
+            <button id="set-motion" class="setting" type="button" aria-pressed="true">
+              <span class="setting-name">Wstrząs</span>
+              <span class="setting-value">auto</span>
+            </button>
+          </div>
+
           <button id="btn-play" class="primary-btn" type="button">Graj</button>
           <p class="screen-foot">Prototyp Fazy 0 — bez konta, bez serwera, bez zapisu.</p>
         </div>

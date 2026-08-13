@@ -59,6 +59,22 @@ Trzy decyzje projektowe, wszystkie wymuszone przez cel Fazy 1:
 3. **Serwer rozstrzyga.** Klient przysyła numer karty, nigdy efektu — indeks
    jest walidowany wobec oferty, którą serwer sam wystawił.
 
+### Teren
+
+Arena nie jest już gołym dyskiem: filary i mury są **generowane z ziarna
+meczu**, więc każda runda ma inny układ osłon. Przeszkody blokują ruch i linię
+strzału — zza muru nie da się trafić ani zostać trafionym, więc osłona jest
+decyzją, a nie dekoracją.
+
+Teren **nie jest wysyłany w snapshocie**: klient generuje go z tego samego
+ziarna tą samą funkcją, więc statyczny układ mapy kosztuje zero bajtów na
+ramkę. To jest w duchu sekcji 15 — manifest treści wersjonowany osobno od
+stanu, nie doklejany do każdej ramki.
+
+Mgnienie Widma **przechodzi przez mur**. To jedyna rzecz, która obraca teren
+na jego korzyść: osłona z natury pomaga temu, kto chce zerwać kontakt,
+a zabójca musi go nawiązać.
+
 Do tego: kurcząca się strefa, trzy rodzaje dropów (leczenie, prędkość,
 obrażenia), zrzuty zaopatrzenia co 45 s jako generator starć, regeneracja poza
 walką oraz wejście do nowej rundy od razu po eliminacji — bramka Fazy 0 mierzy
@@ -102,6 +118,7 @@ src/
 │   ├── combat.ts       walka, umiejętności, regeneracja
 │   ├── upgrades.ts     dwanaście ulepszeń i statystyki wynikowe
 │   ├── progression.ts  doświadczenie, awanse, wybór kart
+│   ├── terrain.ts      przeszkody z ziarna, kolizje, linia strzału
 │   ├── zone.ts         kurcząca się strefa
 │   ├── pickups.ts      dropy i zdarzenia mapy
 │   ├── bots.ts         AI wypełniające lobby
@@ -177,13 +194,19 @@ z sekcji 1. Trzy zmiany, każda wymierzona w zmierzoną przyczynę:
 3. **narastanie agresji botów** — bez tego wszystkie 12 botów ruszało do walki
    w sekundzie zero i runda nie miała wczesnej fazy, tylko masakrę i dogrywkę.
 
-Po dołożeniu klas i progresji tempo zmierzono ponownie. Stan obecny:
-**min 125 s, mediana 164 s, maks. 194 s**, przy zerze śmierci od strefy —
+Po dołożeniu klas, progresji i terenu tempo zmierzono ponownie. Stan obecny:
+**min 146 s, mediana 174 s, maks. 187 s**, przy zerze śmierci od strefy —
 o rundzie decydują walki, nie krąg.
 
-Druga sonda, `classes.probe`, pilnuje równowagi klas na 60 rundach.
-Współczynniki zwycięstw (1,0 = uczciwy udział): **Łowca 1,22 / Kolos 1,22 /
-Widmo 0,55**.
+Druga sonda, `classes.probe`, pilnuje równowagi klas na **120 rundach**.
+Współczynniki zwycięstw (1,0 = uczciwy udział): **Łowca 1,15 / Kolos 1,12 /
+Widmo 0,74**.
+
+> Próba jest duża celowo. Przy 60 rundach na klasę wypada ~20 zwycięstw,
+> a szum Poissona na takiej liczbie to ±0,22 na współczynniku — strojenie
+> różnic mniejszych niż 0,4 na takiej próbie to gonienie własnego ogona.
+> Przekonałem się o tym, przerzucając „dominację" między Łowcą a Kolosem
+> trzy razy z rzędu, zanim zwiększyłem próbę.
 
 > **Otwarta kwestia do rozstrzygnięcia w playteście.** Mediana 2:44 wciąż jest
 > poniżej dolnej granicy 3 minut z sekcji 1. Dalszego wydłużania celowo nie

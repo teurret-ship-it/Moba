@@ -5,6 +5,7 @@ import {
 } from '../sim/constants.ts';
 import type { Snapshot } from '../sim/snapshot.ts';
 import { POWER_ABILITY, type ClassId } from '../sim/classes.ts';
+import { generateTerrain } from '../sim/terrain.ts';
 import { SnapshotBuffer } from '../client/interpolation.ts';
 import { Predictor } from '../client/prediction.ts';
 import { LocalTransport, NET_PROFILES, type NetSimConfig } from '../client/transport.ts';
@@ -119,6 +120,10 @@ export class Game {
       this.names.set(p.id, p.name);
       this.colors.set(p.id, p.colorIndex);
     }
+
+    // Teren odtwarzamy z ziarna — tak samo jak klient w Fazie 1, który
+    // dostanie ziarno w handshake, a nie listę przeszkód co ramkę.
+    this.renderer.setTerrain(generateTerrain(matchSeed));
 
     this.transport.onSnapshot((snapshot) => this.onSnapshot(snapshot));
     this.matchStartBytes = this.transport.stats.bytesReceived;

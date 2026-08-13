@@ -8,6 +8,7 @@ import {
   STEALTH_SPEED_MUL,
 } from './constants.ts';
 import { getClass, MOVE_ABILITY } from './classes.ts';
+import { pushOutOfObstacles, type Obstacle } from './terrain.ts';
 import type { InputFrame, PlayerState } from './types.ts';
 
 /**
@@ -21,7 +22,12 @@ import type { InputFrame, PlayerState } from './types.ts';
  * Dlatego nie wolno tu dopisać nic, co zależy od pełnego świata — w tym
  * obrażeń od Szarży, które rozstrzyga serwer w `combat.ts`.
  */
-export function applyMovement(p: PlayerState, input: InputFrame, tick: number): void {
+export function applyMovement(
+  p: PlayerState,
+  input: InputFrame,
+  tick: number,
+  obstacles: readonly Obstacle[] = [],
+): void {
   if (!p.alive) return;
 
   const cls = getClass(p.classId);
@@ -79,6 +85,21 @@ export function applyMovement(p: PlayerState, input: InputFrame, tick: number): 
   p.y += p.vy * DT;
 
   clampToArena(p);
+
+  // Teren jest statyczny i identyczny po obu stronach, więc wypchnięcie
+  // z przeszkody nie generuje rozjazdu predykcji.
+  //
+  // Teleport przechodzi PRZEZ mur: gdy Mgnienie ląduje w przeszkodzie,
+  // wypychamy postać do przodu, a nie do najbliższej krawędzi. To jedyna
+  // rzecz, która obraca teren na korzyść Widma — osłona z natury pomaga
+  // temu, kto chce zerwać kontakt, a zabójca musi go nawiązać.
+  const move = MOVE_ABILITY[cls.move];
+  const throughWalls = tick <= p.dashEndTick && move.speed > 100;
+  pushOutOfObstacles(
+    p,
+    obstacles,
+    throughWalls ? { x: p.dashDirX, y: p.dashDirY } : undefined,
+  );
 }
 
 export function speedMultiplier(p: PlayerState, tick: number): number {
@@ -191,6 +212,25 @@ export function resolveOverlaps(players: PlayerState[], tick: number): void {
         clampToArena(b);
       }
     }
+  }
+}
+
+/**
+ * Ponowne wypchnięcie z terenu po rozpychaniu się postaci.
+ *
+ * Kolejność w kroku symulacji to ruch → teren → rozpychanie postaci, a to
+ * ostatnie potrafi wepchnąć kogoś w mur. Bez tej poprawki gracz w tłoku
+ * przy ścianie zanurzał się w niej o ułamek jednostki i mógł zza niej
+ * strzelać. Teren jest twardszy niż ciała — on ma ostatnie słowo.
+ */
+export function settleIntoTerrain(
+  players: PlayerState[],
+  obstacles: readonly Obstacle[],
+): void {
+  if (obstacles.length === 0) return;
+  for (const p of players) {
+    if (!p.alive) continue;
+    pushOutOfObstacles(p, obstacles);
   }
 }
 

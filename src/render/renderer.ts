@@ -4,6 +4,7 @@ import type { RenderState } from '../client/interpolation.ts';
 import { createArena, type ArenaObjects } from './arena.ts';
 import { FxSystem } from './fx.ts';
 import type { ClassId } from '../sim/classes.ts';
+import type { Obstacle } from '../sim/terrain.ts';
 import {
   getCharacterTexture,
   getGlowTexture,
@@ -96,6 +97,11 @@ export class ArenaRenderer {
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
+  }
+
+  /** Budowa terenu — wołane przy starcie meczu, gdy zmienia się ziarno. */
+  setTerrain(obstacles: readonly Obstacle[]): void {
+    this.arena.setTerrain(obstacles);
   }
 
   /** Wstrząs kamery — używany przy trafieniu gracza lokalnego. */

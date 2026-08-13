@@ -17,6 +17,7 @@ import { computeStats, XP_PER_DAMAGE, XP_PER_KILL } from './upgrades.ts';
 import { grantXp } from './progression.ts';
 import type { InputFrame, PlayerState, World } from './types.ts';
 import { isStealthed } from './world.ts';
+import { hasLineOfSight } from './terrain.ts';
 
 /**
  * Cała walka jest rozstrzygana tutaj, po stronie autorytatywnej.
@@ -47,10 +48,12 @@ export function findAttackTarget(
     if (other.id === attacker.id || !other.alive) continue;
     if (isStealthed(other, world.tick)) continue;
     const d = Math.hypot(other.x - attacker.x, other.y - attacker.y);
-    if (d < bestDist) {
-      bestDist = d;
-      best = other;
-    }
+    if (d >= bestDist) continue;
+    // Nie da się trafić przez mur — to jest to, co czyni osłonę decyzją,
+    // a nie dekoracją.
+    if (!hasLineOfSight(attacker.x, attacker.y, other.x, other.y, world.obstacles)) continue;
+    bestDist = d;
+    best = other;
   }
   return best;
 }
@@ -232,6 +235,7 @@ function fireBurst(world: World, p: PlayerState): void {
     const dy = other.y - p.y;
     const d = Math.hypot(dx, dy);
     if (d > def.radius) continue;
+    if (!hasLineOfSight(p.x, p.y, other.x, other.y, world.obstacles)) continue;
 
     // Fala trafia także ukrytych — nie musisz ich widzieć, żeby ich zdmuchnąć.
     breakStealth(world, other);
@@ -284,6 +288,7 @@ function fireRend(world: World, p: PlayerState): void {
       const angle = Math.atan2(dy, dx);
       if (Math.abs(angleDiff(angle, p.facing)) > def.halfAngle) continue;
     }
+    if (!hasLineOfSight(p.x, p.y, other.x, other.y, world.obstacles)) continue;
 
     breakStealth(world, other);
     applyDamage(world, other, def.damage * mul, p.id);

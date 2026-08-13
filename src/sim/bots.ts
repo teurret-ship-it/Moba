@@ -3,6 +3,7 @@ import { getClass, POWER_ABILITY } from './classes.ts';
 import type { Rng } from './rng.ts';
 import type { BotBrain, InputFrame, PlayerState, World } from './types.ts';
 import { isStealthed } from './world.ts';
+import { hasLineOfSight, distanceToObstacle } from './terrain.ts';
 
 /**
  * AI botów.
@@ -132,8 +133,9 @@ export function computeBotInput(world: World, bot: PlayerState, rng: Rng): Input
   const my = dy + py;
   const mlen = Math.hypot(mx, my) || 1;
 
-  input.moveX = mx / mlen;
-  input.moveY = my / mlen;
+  const steered = steerAroundObstacles(world, bot, mx / mlen, my / mlen);
+  input.moveX = steered.x;
+  input.moveY = steered.y;
 
   chooseAbilities(world, bot, brain, target, input, rng);
   return input;
@@ -223,6 +225,45 @@ function decide(world: World, bot: PlayerState, brain: BotBrain, rng: Rng): void
 }
 
 /**
+ * Omijanie przeszkód.
+ *
+ * Nie ma tu szukania ścieżki — bot sprawdza, czy tuż przed nim jest mur,
+ * i jeśli tak, ślizga się wzdłuż niego. To wystarcza na okrągłej arenie
+ * z rzadkimi przeszkodami, a co ważniejsze wygląda jak człowiek: gracz też
+ * nie planuje trasy, tylko odbija się od tego, na co wpadnie.
+ */
+function steerAroundObstacles(
+  world: World,
+  bot: PlayerState,
+  dx: number,
+  dy: number,
+): { x: number; y: number } {
+  const probe = 3.4;
+  const aheadX = bot.x + dx * probe;
+  const aheadY = bot.y + dy * probe;
+
+  for (const o of world.obstacles) {
+    const clearance = o.r + 1.6;
+    if (distanceToObstacle(aheadX, aheadY, o) > clearance) continue;
+
+    // Wybierz tę stronę przeszkody, która jest bliżej obecnego kierunku.
+    const leftX = -dy;
+    const leftY = dx;
+    const leftClear = distanceToObstacle(bot.x + leftX * probe, bot.y + leftY * probe, o);
+    const rightClear = distanceToObstacle(bot.x - leftX * probe, bot.y - leftY * probe, o);
+    const sign = leftClear >= rightClear ? 1 : -1;
+
+    // Mieszanka: część pierwotnego kierunku plus ślizg wzdłuż przeszkody.
+    const mx = dx * 0.35 + sign * leftX * 0.9;
+    const my = dy * 0.35 + sign * leftY * 0.9;
+    const len = Math.hypot(mx, my) || 1;
+    return { x: mx / len, y: my / len };
+  }
+
+  return { x: dx, y: dy };
+}
+
+/**
  * Wybór przeciwnika. Bot widzi tylko to, co widziałby klient —
  * gracze w ukryciu nie istnieją dla AI. To nie jest uprzejmość wobec
  * gracza, tylko konsekwencja sekcji 7: ukryci nie trafiają do widoku.
@@ -243,6 +284,8 @@ function findThreat(
 
     const d = Math.hypot(other.x - bot.x, other.y - bot.y);
     if (d > searchRange) continue;
+    // Zza muru bot nikogo nie widzi — tak samo jak gracz.
+    if (!hasLineOfSight(bot.x, bot.y, other.x, other.y, world.obstacles)) continue;
 
     // Bliżej = lepiej, ranny = lepiej. Wagi zależne od skilla:
     // dobry bot dobija rannych, słaby idzie po najbliższym.

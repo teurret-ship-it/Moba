@@ -31,7 +31,12 @@ function emptyTally(): Tally {
 describe('równowaga klas', () => {
   it('każda klasa wygrywa i żadna nie dominuje', () => {
     const tally = emptyTally();
-    const rounds = 60;
+    // 120 rund, nie 60. Przy 60 na klasę wypada ~20 zwycięstw, a szum
+    // Poissona na takiej liczbie to ±4,5 — czyli ±0,22 na współczynniku.
+    // Strojenie różnic mniejszych niż 0,4 na takiej próbie to gonienie
+    // własnego ogona; przekonałem się o tym, przerzucając dominację między
+    // Łowcą a Kolosem trzy razy z rzędu.
+    const rounds = 120;
 
     for (let seed = 1; seed <= rounds; seed++) {
       const sim = new Simulation({ seed: seed * 7919, playerCount: 12, humanCount: 0 });

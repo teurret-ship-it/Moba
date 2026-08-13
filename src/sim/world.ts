@@ -1,5 +1,6 @@
 import {
   ARENA_RADIUS,
+  PLAYER_RADIUS,
   PICKUP_SPAWN_INTERVAL_TICKS,
   SUPPLY_EVENT_INTERVAL_TICKS,
   WARMUP_TICKS,
@@ -7,6 +8,7 @@ import {
 } from './constants.ts';
 import { getClass, CLASS_IDS, type ClassId } from './classes.ts';
 import { baseStats } from './upgrades.ts';
+import { generateTerrain, distanceToObstacle, type Obstacle } from './terrain.ts';
 import { Rng } from './rng.ts';
 import type { PlayerState, World } from './types.ts';
 
@@ -31,6 +33,7 @@ export function createWorld(opts: CreateWorldOptions): World {
   const rng = new Rng(opts.seed);
   const humanCount = opts.humanCount ?? 1;
   const players: PlayerState[] = [];
+  const obstacles = generateTerrain(opts.seed);
 
   // Rozstawienie na okręgu — równy dystans do środka dla wszystkich.
   const spawnRadius = ARENA_RADIUS * 0.74;
@@ -57,6 +60,10 @@ export function createWorld(opts: CreateWorldOptions): World {
       ? rng.pick(CLASS_IDS)
       : (opts.localClass ?? 'lowca');
 
+    // Nikt nie startuje w murze: przy zajętym miejscu przesuwamy punkt
+    // startowy wzdłuż okręgu, zamiast wypychać postać po pierwszym ticku.
+    const spawn = freeSpawn(obstacles, angle, spawnRadius);
+
     players.push(
       createPlayer({
         id: slot,
@@ -64,8 +71,8 @@ export function createWorld(opts: CreateWorldOptions): World {
         name,
         isBot,
         classId,
-        x: Math.cos(angle) * spawnRadius,
-        y: Math.sin(angle) * spawnRadius,
+        x: spawn.x,
+        y: spawn.y,
         facing: angle + Math.PI,
         colorIndex: slot,
       }),
@@ -75,6 +82,7 @@ export function createWorld(opts: CreateWorldOptions): World {
   return {
     tick: 0,
     seed: opts.seed,
+    obstacles,
     phase: 'warmup',
     players,
     pickups: [],
@@ -95,6 +103,26 @@ export function createWorld(opts: CreateWorldOptions): World {
     overTick: -1,
     events: [],
   };
+}
+
+/** Punkt startowy wolny od przeszkód, szukany wzdłuż okręgu spawnu. */
+function freeSpawn(
+  obstacles: readonly Obstacle[],
+  angle: number,
+  radius: number,
+): { x: number; y: number } {
+  for (let i = 0; i < 24; i++) {
+    // Naprzemiennie w lewo i w prawo od pierwotnego kąta — rozstawienie
+    // zostaje równomierne, a nie zsuwa się w jedną stronę.
+    const offset = (i === 0 ? 0 : (i % 2 === 1 ? 1 : -1) * Math.ceil(i / 2) * 0.09);
+    const a = angle + offset;
+    const x = Math.cos(a) * radius;
+    const y = Math.sin(a) * radius;
+    if (obstacles.every((o) => distanceToObstacle(x, y, o) > o.r + PLAYER_RADIUS + 0.6)) {
+      return { x, y };
+    }
+  }
+  return { x: Math.cos(angle) * radius, y: Math.sin(angle) * radius };
 }
 
 interface CreatePlayerArgs {

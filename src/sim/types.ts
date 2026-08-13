@@ -8,6 +8,7 @@
 
 import type { ClassId } from './classes.ts';
 import type { EffectiveStats, UpgradeId } from './upgrades.ts';
+import type { Obstacle } from './terrain.ts';
 
 export type PlayerId = number;
 
@@ -181,6 +182,8 @@ export type SimEvent =
 export interface World {
   tick: number;
   seed: number;
+  /** Statyczny układ przeszkód, generowany z ziarna. */
+  obstacles: Obstacle[];
   phase: MatchPhase;
   players: PlayerState[];
   pickups: Pickup[];

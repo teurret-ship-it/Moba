@@ -58,6 +58,12 @@ export interface PlayerView {
 
 export interface Snapshot {
   tick: number;
+  /**
+   * Ziarno meczu. Klient generuje z niego teren tą samą funkcją co serwer,
+   * więc statyczny układ przeszkód nie kosztuje ani jednego bajtu na ramkę
+   * (sekcja 15: treść wersjonowana osobno od stanu).
+   */
+  seed: number;
   phase: MatchPhase;
   /** Slot odbiorcy — snapshot jest zawsze personalizowany. */
   viewerId: PlayerId;
@@ -154,6 +160,7 @@ export function buildSnapshot(world: World, viewerId: PlayerId): Snapshot {
 
   return {
     tick: world.tick,
+    seed: world.seed,
     phase: world.phase,
     viewerId,
     ackSeq: viewer?.lastAckSeq ?? 0,

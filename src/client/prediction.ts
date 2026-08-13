@@ -3,6 +3,7 @@ import { applyMovement, tryStartMove } from '../sim/movement.ts';
 import type { InputFrame, PlayerState } from '../sim/types.ts';
 import type { SelfView, Snapshot } from '../sim/snapshot.ts';
 import { computeStats } from '../sim/upgrades.ts';
+import { generateTerrain, type Obstacle } from '../sim/terrain.ts';
 
 /**
  * Predykcja ruchu własnej postaci (sekcja 7).
@@ -30,6 +31,9 @@ export class Predictor {
   private errX = 0;
   private errY = 0;
   private lastServerTick = 0;
+  /** Teren odtworzony z ziarna — musi być identyczny jak na serwerze. */
+  private obstacles: readonly Obstacle[] = [];
+  private terrainSeed: number | null = null;
 
   /** Ostatnia zarejestrowana rozbieżność predykcji — do overlayu debug. */
   lastError = 0;
@@ -45,6 +49,12 @@ export class Predictor {
     const self = snapshot.self;
     if (!self) return;
 
+    // Teren generujemy raz na mecz, przy pierwszym snapshocie z nowym ziarnem.
+    if (this.terrainSeed !== snapshot.seed) {
+      this.terrainSeed = snapshot.seed;
+      this.obstacles = generateTerrain(snapshot.seed);
+    }
+
     const beforeX = this.state?.x ?? self.x;
     const beforeY = this.state?.y ?? self.y;
 
@@ -57,7 +67,7 @@ export class Predictor {
     for (const input of this.pending) {
       tick++;
       tryStartMove(this.state, input, tick);
-      applyMovement(this.state, input, tick);
+      applyMovement(this.state, input, tick, this.obstacles);
     }
 
     const dx = beforeX - this.state.x;
@@ -85,7 +95,7 @@ export class Predictor {
     if (!this.state) return;
     this.lastServerTick++;
     tryStartMove(this.state, input, this.lastServerTick);
-    applyMovement(this.state, input, this.lastServerTick);
+    applyMovement(this.state, input, this.lastServerTick, this.obstacles);
   }
 
   /** Wygaszanie korekty — wywoływane z prawdziwym dt renderu. */
@@ -118,6 +128,8 @@ export class Predictor {
     this.errY = 0;
     this.lastError = 0;
     this.lastServerTick = 0;
+    this.terrainSeed = null;
+    this.obstacles = [];
   }
 }
 

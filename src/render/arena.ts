@@ -1,6 +1,11 @@
 import * as THREE from 'three';
 import { ARENA_RADIUS } from '../sim/constants.ts';
+import type { Obstacle } from '../sim/terrain.ts';
 import { getGroundTexture } from './textures.ts';
+
+/** Wysokość przeszkód. Na tyle wysokie, by czytać je jako osłonę, na tyle
+ *  niskie, by nie zasłaniały postaci stojącej tuż za nimi. */
+const OBSTACLE_HEIGHT = 3.4;
 
 /**
  * Statyczna geometria areny: podłoże, krawędź mapy i wizualizacja strefy.
@@ -13,6 +18,8 @@ import { getGroundTexture } from './textures.ts';
 export interface ArenaObjects {
   group: THREE.Group;
   setZone(x: number, y: number, radius: number, nextRadius: number, timeSeconds: number): void;
+  /** Budowa brył przeszkód. Wywoływane raz na mecz, przy zmianie ziarna. */
+  setTerrain(obstacles: readonly Obstacle[]): void;
   dispose(): void;
 }
 
@@ -106,8 +113,80 @@ export function createArena(): ArenaObjects {
   zone.position.y = 0.05;
   group.add(zone);
 
+  // --- przeszkody ---
+  const terrainGroup = new THREE.Group();
+  group.add(terrainGroup);
+
+  const terrainMaterial = new THREE.MeshBasicMaterial({ color: 0x39445c });
+  const terrainCapMaterial = new THREE.MeshBasicMaterial({ color: 0x4a5878 });
+  const disposables: Array<THREE.BufferGeometry> = [];
+
+  function clearTerrain(): void {
+    for (const child of [...terrainGroup.children]) terrainGroup.remove(child);
+    for (const g of disposables) g.dispose();
+    disposables.length = 0;
+  }
+
   return {
     group,
+
+    setTerrain(obstacles) {
+      clearTerrain();
+
+      for (const o of obstacles) {
+        const len = Math.hypot(o.x2 - o.x1, o.y2 - o.y1);
+        const midX = (o.x1 + o.x2) / 2;
+        const midY = (o.y1 + o.y2) / 2;
+
+        // Filar (kapsuła o zerowej długości) to walec; mur to prostopadłościan
+        // z walcami na końcach, żeby narożniki zgadzały się z kolizją, która
+        // liczy odległość od odcinka.
+        if (len < 0.01) {
+          const geo = new THREE.CylinderGeometry(o.r, o.r * 1.06, OBSTACLE_HEIGHT, 14);
+          disposables.push(geo);
+          const mesh = new THREE.Mesh(geo, terrainMaterial);
+          mesh.position.set(midX, OBSTACLE_HEIGHT / 2, -midY);
+          terrainGroup.add(mesh);
+        } else {
+          const angle = Math.atan2(o.y2 - o.y1, o.x2 - o.x1);
+          const box = new THREE.BoxGeometry(len, OBSTACLE_HEIGHT, o.r * 2);
+          disposables.push(box);
+          const mesh = new THREE.Mesh(box, terrainMaterial);
+          mesh.position.set(midX, OBSTACLE_HEIGHT / 2, -midY);
+          mesh.rotation.y = -angle;
+          terrainGroup.add(mesh);
+
+          for (const [ex, ey] of [[o.x1, o.y1], [o.x2, o.y2]] as const) {
+            const cap = new THREE.CylinderGeometry(o.r, o.r, OBSTACLE_HEIGHT, 10);
+            disposables.push(cap);
+            const capMesh = new THREE.Mesh(cap, terrainMaterial);
+            capMesh.position.set(ex, OBSTACLE_HEIGHT / 2, -ey);
+            terrainGroup.add(capMesh);
+          }
+        }
+
+        // Jasna „czapka" na górze: bez niej bryła zlewa się z podłożem
+        // przy patrzeniu z góry pod kątem kamery.
+        const capGeo = new THREE.CircleGeometry(o.r, 14);
+        disposables.push(capGeo);
+        if (len < 0.01) {
+          const top = new THREE.Mesh(capGeo, terrainCapMaterial);
+          top.rotation.x = -Math.PI / 2;
+          top.position.set(midX, OBSTACLE_HEIGHT + 0.02, -midY);
+          terrainGroup.add(top);
+        } else {
+          const angle = Math.atan2(o.y2 - o.y1, o.x2 - o.x1);
+          const strip = new THREE.PlaneGeometry(len, o.r * 2);
+          disposables.push(strip);
+          const top = new THREE.Mesh(strip, terrainCapMaterial);
+          top.rotation.x = -Math.PI / 2;
+          top.rotation.z = angle;
+          top.position.set(midX, OBSTACLE_HEIGHT + 0.02, -midY);
+          terrainGroup.add(top);
+        }
+      }
+    },
+
     setZone(x, y, radius, nextRadius, timeSeconds) {
       zoneUniforms.uCenter.value.set(x, y);
       zoneUniforms.uRadius.value = radius;
@@ -115,6 +194,9 @@ export function createArena(): ArenaObjects {
       zoneUniforms.uTime.value = timeSeconds;
     },
     dispose() {
+      clearTerrain();
+      terrainMaterial.dispose();
+      terrainCapMaterial.dispose();
       ground.geometry.dispose();
       (ground.material as THREE.Material).dispose();
       rim.geometry.dispose();

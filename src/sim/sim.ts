@@ -16,7 +16,7 @@ import {
   tryStartTrick,
 } from './combat.ts';
 import { computeBotInput, createBrain } from './bots.ts';
-import { applyMovement, resolveOverlaps, tryStartMove } from './movement.ts';
+import { applyMovement, resolveOverlaps, settleIntoTerrain, tryStartMove } from './movement.ts';
 import { stepPickups } from './pickups.ts';
 import { botPick, pickUpgrade, stepProgression, stepSurvivalXp } from './progression.ts';
 import { Rng } from './rng.ts';
@@ -123,9 +123,10 @@ export class Simulation {
     // 3. Ruch.
     for (const p of w.players) {
       const input = frames.get(p.id);
-      applyMovement(p, input ?? emptyInput(), w.tick);
+      applyMovement(p, input ?? emptyInput(), w.tick, w.obstacles);
     }
     resolveOverlaps(w.players, w.tick);
+    settleIntoTerrain(w.players, w.obstacles);
 
     // 4. Koniec ukrycia — zdarzenie na krawędzi, do efektu wizualnego.
     for (const p of w.players) {

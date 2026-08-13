@@ -59,6 +59,24 @@ Trzy decyzje projektowe, wszystkie wymuszone przez cel Fazy 1:
 3. **Serwer rozstrzyga.** Klient przysyła numer karty, nigdy efektu — indeks
    jest walidowany wobec oferty, którą serwer sam wystawił.
 
+### Czytelność walki
+
+`docs/FAZA0.md` wymienia „nie wiem, co mnie zabiło" jako osobną skargę
+playtestera — gra może być dobrze zbalansowana i nadal nieczytelna. Na ekranie
+sześciu cali obraz nie zdąży przekazać trzech rzeczy, więc każda ma własny
+sygnał:
+
+- **skąd** — łuk przy krawędzi ekranu wskazuje źródło obrażeń; napastnik bywa
+  poza kadrem,
+- **ile** — liczby obrażeń, w dwóch kolorach: zadane i otrzymane,
+- **gdzie** — kompas do strefy, gdy jesteś poza kręgiem i nie widzisz jego
+  krawędzi na ziemi.
+
+Do tego zatrzymanie obrazu na kilkadziesiąt milisekund przy mocnym ciosie
+(trafienie ma „ważyć") i stała obwódka przy niskim zdrowiu — obwódka mówi
+„jesteś o krok od śmierci", a błysk mówi „właśnie oberwałeś"; to dwie różne
+informacje i mają dwa różne sygnały.
+
 ### Dźwięk
 
 Cała ścieżka dźwiękowa jest **syntezowana przez WebAudio w locie** — zero
@@ -178,7 +196,7 @@ Wobec budżetów z sekcji 4 i 13 planu:
 
 | Metryka | Budżet | Zmierzone |
 |---|---|---|
-| Initial download | ≤15 MB (limit 20) | **~552 kB** (~143 kB gzip) |
+| Initial download | ≤15 MB (limit 20) | **~559 kB** (~145 kB gzip) |
 | Zużycie danych / mecz | ≤1,5 MB (limit 3) | **~0,22 MB** |
 | Snapshot | — | 101 B @ 15 Hz ≈ 1,5 kB/s |
 | Tick symulacji | 15–20 Hz | 20 Hz |

@@ -15,6 +15,7 @@ import { PICKUP_COLORS } from '../render/textures.ts';
 import { Hud } from '../ui/hud.ts';
 import { Screens } from '../ui/screens.ts';
 import { Sfx } from '../audio/sfx.ts';
+import { CombatFeedback } from '../ui/feedback.ts';
 
 /**
  * Spięcie wszystkiego w pętlę.
@@ -43,6 +44,7 @@ export class Game {
   private readonly hud: Hud;
   private readonly screens: Screens;
   private readonly sfx = new Sfx();
+  private readonly feedback: CombatFeedback;
 
   private transport: LocalTransport | null = null;
   private buffer = new SnapshotBuffer();
@@ -73,6 +75,7 @@ export class Game {
     this.renderer = new ArenaRenderer(opts.canvas);
     this.hud = new Hud(opts.uiRoot);
     this.screens = new Screens(opts.uiRoot);
+    this.feedback = new CombatFeedback(opts.uiRoot);
     this.netProfile = NET_PROFILES[opts.netProfile ?? 'local'] ?? NET_PROFILES.local!;
     this.debugVisible = opts.debug ?? false;
     this.hud.toggleDebug(this.debugVisible);
@@ -111,6 +114,7 @@ export class Game {
     this.transport?.dispose();
     this.renderer.reset();
     this.hud.reset();
+    this.feedback.reset();
     this.buffer.clear();
     this.predictor.reset();
     this.screens.hideAll();
@@ -164,15 +168,27 @@ export class Game {
 
     for (const e of snapshot.events) {
       switch (e.type) {
-        case 'damage':
+        case 'damage': {
           this.renderer.fx.hit(e.x, e.y, e.amount);
+          const now = performance.now();
           if (e.target === this.localPlayerId) {
             this.renderer.shake(0.25);
             this.playAt('hurt', e.x, e.y, self, snapshot.tick);
+            this.feedback.addNumber(e.x, e.y, e.amount, 'taken', now);
+            // Skąd przyszedł cios. Napastnik bywa poza kadrem, więc bez
+            // tego gracz naprawdę nie wie, co go zabiło.
+            const src = snapshot.players.find((p) => p.id === e.source);
+            if (src && self) {
+              this.feedback.addDamageDirection(Math.atan2(src.y - self.y, src.x - self.x), now);
+            }
           } else if (e.source === this.localPlayerId) {
             this.playAt('attack', e.x, e.y, self, snapshot.tick);
+            this.feedback.addNumber(e.x, e.y, e.amount, 'dealt', now);
+            // Mocny cios zatrzymuje obraz na moment — trafienie ma „ważyć".
+            if (e.amount >= 25) this.renderer.freeze(0.05);
           }
           break;
+        }
         case 'kill':
           break;
         case 'burst':
@@ -259,6 +275,7 @@ export class Game {
           this.sfx.play('death', { tick: snapshot.tick });
         } else if (e.killer === this.localPlayerId) {
           this.sfx.play('kill', { tick: snapshot.tick });
+          this.renderer.freeze(0.09);
         }
       }
     }
@@ -321,7 +338,21 @@ export class Game {
     this.renderer.render(state, self, this.localPlayerId, dtSeconds);
 
     const snapshot = this.latestSnapshot;
-    if (snapshot) this.hud.update(snapshot, now);
+    if (snapshot) {
+      this.hud.update(snapshot, now);
+
+      const me = snapshot.self;
+      if (me) {
+        this.feedback.setLowHp(me.alive ? me.hp / me.maxHp : 0);
+        const pos = self ?? me;
+        const dz = Math.hypot(pos.x - state.zone.x, pos.y - state.zone.y);
+        this.feedback.setZoneCompass(
+          me.alive && dz > state.zone.radius,
+          Math.atan2(state.zone.y - pos.y, state.zone.x - pos.x),
+        );
+      }
+    }
+    this.feedback.update(now, (x, y, h) => this.renderer.project(x, y, h));
 
     const controls = this.controls.state;
     this.hud.setJoystick(
@@ -452,6 +483,7 @@ export class Game {
     this.transport?.dispose();
     this.renderer.dispose();
     this.sfx.dispose();
+    this.feedback.dispose();
   }
 }
 

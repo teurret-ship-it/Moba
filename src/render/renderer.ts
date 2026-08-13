@@ -65,6 +65,9 @@ export class ArenaRenderer {
   private cameraTarget = new THREE.Vector3(0, 0, 0);
   private shakeAmount = 0;
   private elapsed = 0;
+  private readonly projectionScratch = new THREE.Vector3();
+  /** Zatrzymanie klatki po mocnym trafieniu — sekundy pozostałego bezruchu. */
+  private hitStop = 0;
 
   constructor(canvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({
@@ -99,6 +102,24 @@ export class ArenaRenderer {
     this.camera.updateProjectionMatrix();
   }
 
+  /**
+   * Rzut punktu świata na piksele ekranu.
+   *
+   * Liczby obrażeń rysujemy w DOM, nie w WebGL: tekst w scenie wymagałby
+   * atlasu czcionek i osobnej ścieżki renderu, a na telefonie kosztuje
+   * więcej niż warstwa, którą przeglądarka i tak kompozytuje na GPU.
+   * Zwraca `null`, gdy punkt jest za kamerą.
+   */
+  project(x: number, y: number, height = 2): { sx: number; sy: number } | null {
+    this.projectionScratch.set(x, height, -y);
+    this.projectionScratch.project(this.camera);
+    if (this.projectionScratch.z > 1) return null;
+    return {
+      sx: (this.projectionScratch.x * 0.5 + 0.5) * window.innerWidth,
+      sy: (-this.projectionScratch.y * 0.5 + 0.5) * window.innerHeight,
+    };
+  }
+
   /** Budowa terenu — wołane przy starcie meczu, gdy zmienia się ziarno. */
   setTerrain(obstacles: readonly Obstacle[]): void {
     this.arena.setTerrain(obstacles);
@@ -109,12 +130,31 @@ export class ArenaRenderer {
     this.shakeAmount = Math.min(1.2, this.shakeAmount + amount);
   }
 
+  /**
+   * Krótkie zatrzymanie obrazu po mocnym ciosie.
+   *
+   * Kilkadziesiąt milisekund bezruchu sprawia, że trafienie „waży". To jest
+   * ten sam trik, co w bijatykach — i na małym ekranie działa lepiej niż
+   * jakikolwiek efekt cząsteczkowy, bo nie wymaga patrzenia w konkretne
+   * miejsce.
+   */
+  freeze(seconds: number): void {
+    this.hitStop = Math.min(0.12, Math.max(this.hitStop, seconds));
+  }
+
   render(
     state: RenderState,
     self: { x: number; y: number; facing: number } | null,
     selfId: number,
     dt: number,
   ): void {
+    // Zatrzymanie klatki: świat stoi, ale render leci dalej, więc obraz
+    // się nie zacina — po prostu nic się nie rusza.
+    if (this.hitStop > 0) {
+      this.hitStop -= dt;
+      dt = 0;
+    }
+
     this.elapsed += dt;
 
     this.arena.setZone(

@@ -9,6 +9,7 @@
 import type { ClassId } from './classes.ts';
 import type { EffectiveStats, UpgradeId } from './upgrades.ts';
 import type { Obstacle } from './terrain.ts';
+import type { ModifierDef } from './modifiers.ts';
 
 export type PlayerId = number;
 
@@ -269,6 +270,8 @@ export interface World {
   pickups: Pickup[];
   decoys: Decoy[];
   nextDecoyId: number;
+  /** Wariant rundy — jedna zasada obowiązująca wszystkich (modifiers.ts). */
+  modifier: ModifierDef;
   zone: ZoneState;
   objective: ObjectiveState;
   nextPickupId: number;

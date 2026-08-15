@@ -79,7 +79,7 @@ function applyPick(world: World, p: PlayerState, index: number): void {
 
   p.upgrades.push(id);
   const before = p.stats;
-  p.stats = computeStats(p.classId, p.upgrades);
+  p.stats = computeStats(p.classId, p.upgrades, world.modifier);
 
   // Wzrost maksimum zdrowia leczy o tyle samo — inaczej „+22 HP" przy
   // pełnym pasku byłoby wyborem, który nic nie daje w chwili wzięcia.

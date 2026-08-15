@@ -6,12 +6,13 @@ import {
   WARMUP_TICKS,
   ZONE_START_RADIUS,
 } from './constants.ts';
-import { getClass, CLASS_IDS, type ClassId } from './classes.ts';
+import { CLASS_IDS, type ClassId } from './classes.ts';
 import { baseStats } from './upgrades.ts';
 import { generateTerrain, distanceToObstacle, type Obstacle } from './terrain.ts';
 import { createObjective } from './objective.ts';
 import { Rng } from './rng.ts';
 import type { PlayerState, World } from './types.ts';
+import { MODIFIERS, pickModifier, type ModifierId } from './modifiers.ts';
 
 export const BOT_NAMES = [
   'Kruk', 'Igła', 'Wilk', 'Sowa', 'Cień', 'Mors', 'Rysz', 'Lis',
@@ -28,13 +29,21 @@ export interface CreateWorldOptions {
   humanCount?: number;
   /** Klasa gracza lokalnego. Boty losują własne. */
   localClass?: ClassId;
+  /**
+   * Wymuszony wariant rundy. Domyślnie wynika z ziarna.
+   *
+   * Potrzebne testom mechanik (wariant zmieniłby mierzone liczby) i przydatne
+   * przy playteście konkretnej zasady bez losowania jej po dwadzieścia razy.
+   */
+  modifierId?: ModifierId;
 }
 
 export function createWorld(opts: CreateWorldOptions): World {
   const rng = new Rng(opts.seed);
   const humanCount = opts.humanCount ?? 1;
   const players: PlayerState[] = [];
-  const obstacles = generateTerrain(opts.seed);
+  const modifier = opts.modifierId ? MODIFIERS[opts.modifierId] : pickModifier(opts.seed);
+  const obstacles = generateTerrain(opts.seed, modifier.terrainMul);
 
   // Rozstawienie na okręgu — równy dystans do środka dla wszystkich.
   const spawnRadius = ARENA_RADIUS * 0.74;
@@ -76,6 +85,7 @@ export function createWorld(opts: CreateWorldOptions): World {
         y: spawn.y,
         facing: angle + Math.PI,
         colorIndex: slot,
+        mod: modifier,
       }),
     );
   }
@@ -87,18 +97,20 @@ export function createWorld(opts: CreateWorldOptions): World {
     phase: 'warmup',
     players,
     pickups: [],
+    modifier,
     zone: {
       x: 0,
       y: 0,
-      radius: ZONE_START_RADIUS,
-      nextRadius: ZONE_START_RADIUS,
+      radius: ZONE_START_RADIUS * modifier.zoneStartMul,
+      nextRadius: ZONE_START_RADIUS * modifier.zoneStartMul,
       shrinking: false,
     },
     decoys: [],
     nextDecoyId: 1,
     objective: createObjective(),
     nextPickupId: 1,
-    nextPickupSpawnTick: WARMUP_TICKS + PICKUP_SPAWN_INTERVAL_TICKS,
+    nextPickupSpawnTick:
+      WARMUP_TICKS + Math.round(PICKUP_SPAWN_INTERVAL_TICKS * modifier.pickupRateMul),
     nextSupplyTick: WARMUP_TICKS + SUPPLY_EVENT_INTERVAL_TICKS,
     supplyWarnedTick: -1,
     supplyX: 0,
@@ -139,10 +151,12 @@ interface CreatePlayerArgs {
   y: number;
   facing: number;
   colorIndex: number;
+  /** Wariant rundy — wchodzi w statystyki startowe (modifiers.ts). */
+  mod?: { healthMul: number; speedMul: number; cooldownMul: number };
 }
 
 export function createPlayer(a: CreatePlayerArgs): PlayerState {
-  const cls = getClass(a.classId);
+  const stats = baseStats(a.classId, a.mod);
   return {
     id: a.id,
     slot: a.slot,
@@ -157,8 +171,8 @@ export function createPlayer(a: CreatePlayerArgs): PlayerState {
     vy: 0,
     facing: a.facing,
 
-    hp: cls.maxHp,
-    maxHp: cls.maxHp,
+    hp: stats.maxHp,
+    maxHp: stats.maxHp,
     alive: true,
     deathTick: -1,
     lastHitBy: -1,
@@ -198,7 +212,7 @@ export function createPlayer(a: CreatePlayerArgs): PlayerState {
     upgrades: [],
     offer: [],
     offerDeadlineTick: -1,
-    stats: baseStats(a.classId),
+    stats,
     impetusEndTick: -1,
 
     kills: 0,

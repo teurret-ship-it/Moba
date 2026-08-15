@@ -2,6 +2,7 @@ import { DT, TICK_HZ } from '../sim/constants.ts';
 import { applyMovement, tryStartMove } from '../sim/movement.ts';
 import type { InputFrame, PlayerState } from '../sim/types.ts';
 import type { SelfView, Snapshot } from '../sim/snapshot.ts';
+import { MODIFIERS, type ModifierId } from '../sim/modifiers.ts';
 import { computeStats } from '../sim/upgrades.ts';
 import { generateTerrain, type Obstacle } from '../sim/terrain.ts';
 
@@ -66,7 +67,7 @@ export class Predictor {
     const beforeX = this.state?.x ?? self.x;
     const beforeY = this.state?.y ?? self.y;
 
-    this.state = fromSelfView(self);
+    this.state = fromSelfView(self, snapshot.modifier);
     this.lastServerTick = snapshot.tick;
 
     this.pending = this.pending.filter((i) => i.seq > snapshot.ackSeq);
@@ -143,7 +144,7 @@ export class Predictor {
 }
 
 /** Minimalny `PlayerState` wystarczający do odtworzenia ruchu. */
-function fromSelfView(self: SelfView): PlayerState {
+function fromSelfView(self: SelfView, modifier: ModifierId): PlayerState {
   return {
     id: self.id,
     slot: self.id,
@@ -195,7 +196,7 @@ function fromSelfView(self: SelfView): PlayerState {
     offerDeadlineTick: -1,
     // Te same ulepszenia dają te same statystyki co na serwerze —
     // inaczej predykcja ruchu rozjechałaby się po każdym awansie.
-    stats: computeStats(self.classId, self.upgrades),
+    stats: computeStats(self.classId, self.upgrades, MODIFIERS[modifier] ?? MODIFIERS.zwykla),
     impetusEndTick: self.impetusEndTick,
     speedBuffEndTick: self.speedBuffEndTick,
     damageBuffEndTick: self.damageBuffEndTick,

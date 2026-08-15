@@ -759,7 +759,7 @@ export function killPlayer(world: World, victim: PlayerState, killerId: number):
     const idx = victim.upgrades.indexOf('drugie_zycie');
     if (idx >= 0) {
       victim.upgrades.splice(idx, 1);
-      victim.stats = computeStats(victim.classId, victim.upgrades);
+      victim.stats = computeStats(victim.classId, victim.upgrades, world.modifier);
       victim.maxHp = victim.stats.maxHp;
       victim.hp = victim.stats.maxHp * 0.3;
       victim.lastHitTick = world.tick;
@@ -790,7 +790,7 @@ export function killPlayer(world: World, victim: PlayerState, killerId: number):
   if (killer) {
     killer.kills += 1;
     killer.score += SCORE_PER_KILL;
-    grantXp(world, killer.id, XP_PER_KILL);
+    grantXp(world, killer.id, XP_PER_KILL * world.modifier.killXpMul);
 
     // Cecha klasy: eliminacja odnawia SZTUCZKĘ.
     //

@@ -1,5 +1,6 @@
 import { AOI_RADIUS, SNAPSHOT_HZ, TICK_HZ } from './constants.ts';
 import type { ClassId } from './classes.ts';
+import type { ModifierId } from './modifiers.ts';
 import type { UpgradeId } from './upgrades.ts';
 import type {
   Decoy,
@@ -66,6 +67,8 @@ export interface Snapshot {
    * (sekcja 15: treść wersjonowana osobno od stanu).
    */
   seed: number;
+  /** Wariant rundy — klient pokazuje jego nazwę i liczy z niego statystyki. */
+  modifier: ModifierId;
   phase: MatchPhase;
   /** Slot odbiorcy — snapshot jest zawsze personalizowany. */
   viewerId: PlayerId;
@@ -184,6 +187,7 @@ export function buildSnapshot(world: World, viewerId: PlayerId): Snapshot {
   return {
     tick: world.tick,
     seed: world.seed,
+    modifier: world.modifier.id,
     phase: world.phase,
     viewerId,
     ackSeq: viewer?.lastAckSeq ?? 0,

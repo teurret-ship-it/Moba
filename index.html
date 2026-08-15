@@ -148,6 +148,17 @@
           <!-- Ustawienia sterowania. Trzy przełączniki, wszystkie wynikające
                z wytycznych, nie z gustu — uzasadnienia w src/app/settings.ts.
                Stoją na ekranie startowym, bo tam gracz jeszcze patrzy. -->
+          <!-- Wariant rundy: jedna zasada obowiązująca wszystkich, ogłoszona
+               ZANIM gracz wciśnie „Graj". Wariant, którego się nie zna, jest
+               nieuczciwy; wariant, którego się nie zauważy, nie istnieje. -->
+          <div id="round-modifier" class="modifier" hidden>
+            <span class="modifier-glyph"></span>
+            <span class="modifier-body">
+              <span class="modifier-name"></span>
+              <span class="modifier-text"></span>
+            </span>
+          </div>
+
           <div class="settings" id="settings">
             <button id="set-handed" class="setting" type="button" aria-pressed="false">
               <span class="setting-name">Ręka</span>

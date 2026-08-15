@@ -22,7 +22,8 @@ export function stepPickups(world: World, rng: Rng): void {
 
 function spawnRoutinePickups(world: World, rng: Rng): void {
   if (world.tick < world.nextPickupSpawnTick) return;
-  world.nextPickupSpawnTick = world.tick + PICKUP_SPAWN_INTERVAL_TICKS;
+  world.nextPickupSpawnTick =
+    world.tick + Math.round(PICKUP_SPAWN_INTERVAL_TICKS * world.modifier.pickupRateMul);
   if (world.pickups.length >= PICKUP_MAX_ACTIVE) return;
 
   // Dropy spawnują się tylko w strefie — inaczej gra zachęca do wychodzenia

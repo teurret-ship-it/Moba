@@ -14,7 +14,7 @@ import { emptyInput, type InputFrame } from '../types.ts';
  */
 
 function arena(localClass: ClassId, seed = 1) {
-  const s = new Simulation({ seed, playerCount: 4, humanCount: 1, localClass });
+  const s = new Simulation({ seed, playerCount: 4, humanCount: 1, localClass, modifierId: 'zwykla' });
   s.world.phase = 'live';
   for (const p of s.world.players) {
     if (p.id === 0) continue;

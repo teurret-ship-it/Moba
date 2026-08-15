@@ -6,7 +6,7 @@ import { buildSnapshot } from '../snapshot.ts';
 import { emptyInput, type InputFrame } from '../types.ts';
 
 function trickster(seed = 1) {
-  const s = new Simulation({ seed, playerCount: 4, humanCount: 1, localClass: 'kuglarz' });
+  const s = new Simulation({ seed, playerCount: 4, humanCount: 1, localClass: 'kuglarz', modifierId: 'zwykla' });
   s.world.phase = 'live';
   // Reszta lobby odsunięta i bierna — testujemy mechanikę, nie starcie.
   for (const p of s.world.players) {

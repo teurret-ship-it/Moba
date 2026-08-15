@@ -225,20 +225,29 @@ export interface EffectiveStats {
  * w `PlayerState.stats`. Klient przelicza to samo z tej samej listy, więc
  * predykcja ruchu pozostaje zgodna z serwerem.
  */
-export function computeStats(classId: ClassId, upgrades: readonly UpgradeId[]): EffectiveStats {
+export function computeStats(
+  classId: ClassId,
+  upgrades: readonly UpgradeId[],
+  /**
+   * Wariant rundy. Wchodzi tutaj, a nie w miejsca użycia, bo statystyki
+   * są liczone raz i lądują w `PlayerState.stats` — dzięki temu wariant nie
+   * rozłazi się po całej symulacji i klient liczy dokładnie to samo.
+   */
+  mod: { healthMul: number; speedMul: number; cooldownMul: number } = NEUTRAL_MOD,
+): EffectiveStats {
   const cls: ClassDef = getClass(classId);
   const count = (id: UpgradeId) => upgrades.reduce((n, u) => (u === id ? n + 1 : n), 0);
 
   const stats: EffectiveStats = {
-    maxHp: cls.maxHp + 22 * count('wytrzymalosc'),
-    speed: cls.speed * Math.pow(1.07, count('szybkosc')),
+    maxHp: Math.round((cls.maxHp + 22 * count('wytrzymalosc')) * mod.healthMul),
+    speed: cls.speed * Math.pow(1.07, count('szybkosc')) * mod.speedMul,
     attackRange: cls.attackRange + 0.7 * count('zasieg'),
     attackDamage: cls.attackDamage * Math.pow(1.14, count('sila')),
     attackCooldownTicks: Math.max(
       2,
       Math.round(cls.attackCooldownTicks * Math.pow(1 / 1.11, count('zwinnosc'))),
     ),
-    cooldownMul: Math.pow(0.88, count('odnowienie')),
+    cooldownMul: Math.pow(0.88, count('odnowienie')) * mod.cooldownMul,
     regenPerSecond: 5 * count('regeneracja'),
     lifesteal: 0.08 * count('wampiryzm'),
     pickupReachBonus: 2.5 * count('magnes'),
@@ -265,8 +274,13 @@ export function computeStats(classId: ClassId, upgrades: readonly UpgradeId[]): 
   return stats;
 }
 
-export function baseStats(classId: ClassId): EffectiveStats {
-  return computeStats(classId, []);
+const NEUTRAL_MOD = { healthMul: 1, speedMul: 1, cooldownMul: 1 };
+
+export function baseStats(
+  classId: ClassId,
+  mod?: { healthMul: number; speedMul: number; cooldownMul: number },
+): EffectiveStats {
+  return computeStats(classId, [], mod);
 }
 
 /**

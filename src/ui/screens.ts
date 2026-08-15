@@ -62,6 +62,27 @@ export class Screens {
     this.recordsRow = required(root, '#over-records');
   }
 
+  /**
+   * Wariant nadchodzącej rundy.
+   *
+   * Ekran startowy zna ziarno, zanim runda wystartuje, więc wariant da się
+   * pokazać z wyprzedzeniem — a to jest jedyny moment, w którym gracz ma
+   * czas go przeczytać.
+   */
+  showModifier(mod: { name: string; text: string; glyph: string; id: string } | null): void {
+    const row = this.start.querySelector<HTMLElement>('#round-modifier');
+    if (!row) return;
+    // „Zwykła runda" nie jest wariantem, więc nie zajmuje miejsca na ekranie.
+    if (!mod || mod.id === 'zwykla') {
+      row.hidden = true;
+      return;
+    }
+    setText(row, '.modifier-glyph', mod.glyph);
+    setText(row, '.modifier-name', mod.name);
+    setText(row, '.modifier-text', mod.text);
+    row.hidden = false;
+  }
+
   showStart(onPlay: (classId: ClassId) => void): void {
     this.start.hidden = false;
     this.over.hidden = true;
@@ -332,6 +353,11 @@ function classMark(id: ClassId): string {
     return `<svg ${common}><circle cx="12" cy="17" r="9" fill="#4db6ac" stroke="#0b0e15" stroke-width="2" opacity="0.55"/><circle cx="21" cy="17" r="9" fill="#4db6ac" stroke="#0b0e15" stroke-width="2"/></svg>`;
   }
   return `<svg ${common}><circle cx="17" cy="17" r="13" fill="#4fc3f7" stroke="#0b0e15" stroke-width="2"/></svg>`;
+}
+
+function setText(root: HTMLElement, selector: string, text: string): void {
+  const el = root.querySelector<HTMLElement>(selector);
+  if (el) el.textContent = text;
 }
 
 function setValue(el: HTMLButtonElement | null, text: string, on: boolean): void {

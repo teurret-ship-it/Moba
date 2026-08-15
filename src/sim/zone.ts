@@ -21,20 +21,22 @@ import type { World } from './types.ts';
 const HOLD_TICKS = WARMUP_TICKS + ZONE_HOLD_SECONDS * TICK_HZ;
 const SHRINK_END_TICKS = WARMUP_TICKS + ZONE_SHRINK_END_SECONDS * TICK_HZ;
 
-export function zoneRadiusAtTick(tick: number): number {
-  if (tick <= HOLD_TICKS) return ZONE_START_RADIUS;
+export function zoneRadiusAtTick(tick: number, startMul = 1): number {
+  const start = ZONE_START_RADIUS * startMul;
+  if (tick <= HOLD_TICKS) return start;
   if (tick >= SHRINK_END_TICKS) return ZONE_END_RADIUS;
   const t = (tick - HOLD_TICKS) / (SHRINK_END_TICKS - HOLD_TICKS);
   // Ease-in: na początku ledwo zauważalne, pod koniec dociska.
   const eased = t * t * (3 - 2 * t);
-  return ZONE_START_RADIUS + (ZONE_END_RADIUS - ZONE_START_RADIUS) * eased;
+  return start + (ZONE_END_RADIUS - start) * eased;
 }
 
 export function stepZone(world: World): void {
   const prev = world.zone.radius;
-  const next = zoneRadiusAtTick(world.tick);
+  const startMul = world.modifier.zoneStartMul;
+  const next = zoneRadiusAtTick(world.tick, startMul);
   world.zone.radius = next;
-  world.zone.nextRadius = zoneRadiusAtTick(world.tick + 10 * TICK_HZ);
+  world.zone.nextRadius = zoneRadiusAtTick(world.tick + 10 * TICK_HZ, startMul);
   const shrinking = next < prev - 1e-9;
 
   // Zdarzenie tylko na krawędzi zmiany stanu — HUD ma pokazać komunikat raz.

@@ -4,6 +4,7 @@ import {
   TICK_MS,
 } from '../sim/constants.ts';
 import type { Snapshot } from '../sim/snapshot.ts';
+import { MODIFIER_BANNER_TICKS, pickModifier } from '../sim/modifiers.ts';
 import {
   getClass,
   MOVE_ABILITY,
@@ -123,6 +124,7 @@ export class Game {
     );
 
     this.screens.bindSettings(this.settings);
+    this.announceModifier();
 
     this.screens.showStart((classId) => {
       // Kontekst audio wolno obudzić tylko z gestu użytkownika — „Graj"
@@ -141,8 +143,22 @@ export class Game {
     document.body.dataset.handed = s.handed;
   }
 
+  /**
+   * Ziarno NASTĘPNEJ rundy, wylosowane z wyprzedzeniem.
+   *
+   * Wariant rundy wynika z ziarna, a ekran startowy ma go pokazać, zanim
+   * gracz wciśnie „Graj". Bez wcześniejszego losowania wariant dałoby się
+   * ogłosić dopiero po starcie — czyli wtedy, gdy nie ma już czasu czytać.
+   */
+  private nextSeed = (Math.random() * 0xffffffff) >>> 0;
+
+  private announceModifier(): void {
+    this.screens.showModifier(pickModifier(this.nextSeed));
+  }
+
   startMatch(seed?: number, classId?: ClassId): void {
-    const matchSeed = seed ?? (Math.random() * 0xffffffff) >>> 0;
+    const matchSeed = seed ?? this.nextSeed;
+    this.nextSeed = (Math.random() * 0xffffffff) >>> 0;
     if (classId) this.localClass = classId;
     this.transport?.dispose();
     this.renderer.reset();
@@ -152,6 +168,18 @@ export class Game {
     this.buffer.clear();
     this.predictor.reset();
     this.screens.hideAll();
+
+    // Wariant ogłaszany też na starcie rundy: ekran startowy pokazuje go
+    // przed „Graj", ale gracz wchodzący prosto z „Jeszcze raz" tego ekranu
+    // nie widzi.
+    const mod = pickModifier(matchSeed);
+    if (mod.id !== 'zwykla') {
+      this.hud.banner(
+        `${mod.glyph}  ${mod.name} — ${mod.text}`,
+        (MODIFIER_BANNER_TICKS / SIM_HZ) * 1000,
+        performance.now(),
+      );
+    }
 
     // Ekran ma nie gasnąć w trakcie rundy, ale tylko w trakcie rundy.
     this.awake.enable();
@@ -497,6 +525,9 @@ export class Game {
       () => this.startMatch(),
       beaten ? { current: this.records.current, beaten } : undefined,
     );
+    // Następna runda ma już wylosowany wariant — ekran startowy pokaże go,
+    // gdy gracz tam wróci.
+    this.announceModifier();
   }
 
   /**

@@ -146,6 +146,43 @@ Trzy decyzje projektowe, wszystkie wymuszone przez cel Fazy 1:
 3. **Serwer rozstrzyga.** Klient przysyła numer karty, nigdy efektu — indeks
    jest walidowany wobec oferty, którą serwer sam wystawił.
 
+### Warianty rundy
+
+Klasy dały różne rundy między sobą, ulepszenia dały różne rundy tą samą klasą —
+ale sam **format** był zawsze ten sam: dwunastu, cztery minuty, kurczący się
+krąg. A największym wrogiem trzeciej rundy z rzędu jest to, że wygląda
+dokładnie jak pierwsza.
+
+Wariant to jedna zasada obowiązująca wszystkich, wylosowana z ziarna i
+ogłoszona **przed** startem:
+
+| | |
+|---|---|
+| ↻ **Szybkie ręce** | umiejętności odnawiają się o jedną trzecią szybciej |
+| ✂ **Krucha skóra** | wszyscy mają o jedną czwartą mniej zdrowia |
+| » **Żywe srebro** | wszyscy biegają o jedną piątą szybciej |
+| ⊕ **Obfitość** | dropy pojawiają się dwa razy częściej |
+| ✦ **Łowcy nagród** | eliminacja daje podwójne doświadczenie |
+| ◎ **Ciasny krąg** | strefa startuje mniejsza |
+| ▱ **Goły teren** | znacznie mniej osłon |
+
+Trzy reguły, wszystkie wymuszone przez to, czym Faza 0 jest:
+
+1. **Symetryczny.** Dotyczy każdego tak samo, więc nie wymaga strojenia balansu
+   klas od nowa — i to jedyny powód, dla którego stać mnie na siedem wariantów
+   zamiast jednego. Pomiar potwierdza: przy włączonych wariantach współczynniki
+   klas wynoszą 0,92 / 0,99 / 1,04 / 1,04.
+2. **Wyrażony istniejącymi pokrętłami.** Żaden nie dokłada nowej mechaniki —
+   wszystkie mnożą to, co już jest. Nowa mechanika w wariancie byłaby treścią,
+   którą gracz zobaczy raz na osiem rund.
+3. **Ogłoszony przed startem.** Wariant, którego gracz nie zna, jest nieuczciwy;
+   wariant, którego się nie zauważy, nie istnieje. Stąd ziarno następnej rundy
+   losowane z wyprzedzeniem — inaczej wariant dałoby się pokazać dopiero po
+   starcie, czyli wtedy, gdy nie ma już czasu czytać.
+
+Co trzecia runda jest celowo „zwykła": wariant przestaje być wariantem, gdy
+nie ma do czego go porównać.
+
 ### Rdzeń — struktura środkowej fazy
 
 Między pierwszymi potyczkami a domknięciem przez strefę runda nie miała

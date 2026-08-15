@@ -42,14 +42,17 @@ const EDGE_MARGIN = 5;
  * Deterministyczna: to samo ziarno daje tę samą mapę, więc `?seed=` odtwarza
  * mecz co do przeszkody, a klient nie potrzebuje ich dostawać z serwera.
  */
-export function generateTerrain(seed: number): Obstacle[] {
+export function generateTerrain(seed: number, density = 1): Obstacle[] {
   // Osobny strumień losowości niż symulacja — inaczej dołożenie przeszkody
   // przesuwałoby wszystkie późniejsze losowania w meczu.
   const rng = new Rng(seed ^ 0x5bf03635);
   const out: Obstacle[] = [];
 
-  const pillars = rng.int(5, 8);
-  const walls = rng.int(3, 5);
+  // Losujemy zawsze tyle samo razy i dopiero potem przycinamy liczbę brył:
+  // wariant terenu nie może przesuwać strumienia, bo wtedy „ten sam seed"
+  // przestaje znaczyć „ta sama arena z mniejszą liczbą osłon".
+  const pillars = Math.round(rng.int(5, 8) * density);
+  const walls = Math.round(rng.int(3, 5) * density);
 
   for (let i = 0; i < pillars; i++) {
     const spot = findSpot(rng, out, 3.2);

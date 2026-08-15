@@ -94,7 +94,7 @@ export function stepAutoAttacks(world: World): void {
     p.cdAttack = world.tick + p.stats.attackCooldownTicks;
     p.facing = Math.atan2(target.y - p.y, target.x - p.x);
 
-    applyDamage(world, target, p.stats.attackDamage * damageMultiplier(p, world.tick), p.id);
+    applyDamage(world, target, p.stats.attackDamage * damageMultiplier(p, world.tick), p.id, true);
   }
 }
 
@@ -583,6 +583,7 @@ export function stepDecoys(world: World): void {
       target,
       owner.stats.attackDamage * def.damageShare * damageMultiplier(owner, world.tick),
       owner.id,
+      true,
     );
   }
 }
@@ -695,6 +696,8 @@ export function applyDamage(
   target: PlayerState,
   amount: number,
   sourceId: number,
+  /** Czy to zwykły atak (a nie trafienie umiejętnością) — do efektów. */
+  auto = false,
 ): void {
   if (!target.alive || amount <= 0) return;
 
@@ -743,6 +746,7 @@ export function applyDamage(
     source: sourceId,
     x: target.x,
     y: target.y,
+    auto,
     tick: world.tick,
   });
 

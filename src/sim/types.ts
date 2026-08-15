@@ -235,7 +235,15 @@ export type MatchPhase = 'warmup' | 'live' | 'over';
 /** Zdarzenia jednorazowe — konsumowane przez render/HUD, nie trzymane w stanie. */
 export type SimEvent =
   | { type: 'kill'; killer: PlayerId; victim: PlayerId; tick: number }
-  | { type: 'damage'; target: PlayerId; amount: number; source: PlayerId; x: number; y: number; tick: number }
+  /**
+   * `auto` odróżnia zwykły atak od trafienia umiejętnością.
+   *
+   * Klient rysuje z tego smugę od atakującego do celu — a wie, gdzie stoi
+   * atakujący, bo ma go w snapshocie. Dzięki temu „widać, kto bije" nie
+   * kosztuje ani jednego dodatkowego bajtu na ramkę: to jedna flaga
+   * w zdarzeniu, które i tak było wysyłane.
+   */
+  | { type: 'damage'; target: PlayerId; amount: number; source: PlayerId; x: number; y: number; auto: boolean; tick: number }
   | { type: 'dash'; player: PlayerId; x: number; y: number; tick: number }
   | { type: 'stealthIn'; player: PlayerId; x: number; y: number; tick: number }
   | { type: 'stealthOut'; player: PlayerId; x: number; y: number; tick: number }

@@ -225,6 +225,48 @@ export class FxSystem {
     }
   }
 
+  /**
+   * Zwykły atak: smuga od atakującego do celu plus błysk na trafieniu.
+   *
+   * Do tej pory atak podstawowy nie miał ŻADNEGO obrazu — była tylko liczba
+   * obrażeń nad celem. Przy ataku automatycznym to jest najgorszy możliwy
+   * układ: gracz nie naciska przycisku, więc nie ma nawet własnego gestu,
+   * z którego mógłby wywnioskować, co się dzieje. Nie było widać ani kogo
+   * bije on, ani kto bije jego.
+   *
+   * Smuga jest krótka i szybka (0,12 s), bo pada dwa razy na sekundę —
+   * dłuższa zlałaby się w ciągłą linię i przestała nieść informację.
+   */
+  strike(fromX: number, fromY: number, toX: number, toY: number, colorIndex: number): void {
+    const color = PLAYER_COLORS[colorIndex % PLAYER_COLORS.length]!;
+    const steps = 5;
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      this.emit({
+        x: fromX + (toX - fromX) * t,
+        y: fromY + (toY - fromY) * t,
+        height: 1.15,
+        color,
+        // Smuga zwęża się ku celowi — kierunek czyta się bez patrzenia
+        // na oba końce naraz.
+        startScale: 1.5 - t * 0.7,
+        endScale: 0.15,
+        life: 0.1 + t * 0.04,
+        opacity: 0.95,
+      });
+    }
+    // Błysk w miejscu trafienia, w kolorze ATAKUJĄCEGO — dzięki temu
+    // w kotłowaninie widać, czyj to był cios.
+    this.emit({
+      x: toX, y: toY, height: 1.3,
+      color,
+      startScale: 0.6,
+      endScale: 3.0,
+      life: 0.18,
+      opacity: 0.9,
+    });
+  }
+
   shield(x: number, y: number, up: boolean): void {
     this.emit({
       x, y, height: 1.2,

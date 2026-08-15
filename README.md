@@ -226,6 +226,31 @@ Do tego zatrzymanie obrazu na kilkadziesiąt milisekund przy mocnym ciosie
 „jesteś o krok od śmierci", a błysk mówi „właśnie oberwałeś"; to dwie różne
 informacje i mają dwa różne sygnały.
 
+**Zwykły atak też musi być widać.** Przez czternaście iteracji atak
+podstawowy nie miał **żadnego** obrazu — jedyną jego oznaką była liczba
+obrażeń nad celem. Przy ataku automatycznym to jest najgorszy możliwy układ:
+gracz nie naciska przycisku, więc nie ma nawet własnego gestu, z którego
+mógłby wyczytać, co się dzieje. Nie było widać ani kogo bije on, ani kto bije
+jego. Teraz każdy cios to:
+
+- **smuga od atakującego do celu**, w kolorze atakującego, zwężająca się ku
+  trafieniu — kierunek czyta się bez patrzenia na oba końce naraz;
+- **wypad sylwetki** w stronę celu i powrót. Smuga mówi „stąd dotąd", wypad
+  mówi „TA postać właśnie uderzyła" — w kotłowaninie sześciu sylwetek to jest
+  różnica między „ktoś oberwał" a „on go bije";
+- **dwa pierścienie pod nogami**: bursztynowy = twój cel, czerwony = ten, kto
+  bije ciebie. Kolor pod postacią widać kątem oka; ikona nad głową ginie wśród
+  pasków zdrowia. Gdy ktoś jest jednocześnie celem i napastnikiem, wygrywa
+  czerwony — „ten cię zabija" jest pilniejsze niż „tego bijesz".
+
+Pierścienie trzymają się dłużej niż pojedynczy cios (0,9 s cel, 1,6 s
+napastnik), bo atak pada co pół sekundy i migotałyby w jego rytm. Napastnik
+gaśnie wolniej celowo: koszt pomyłki jest niesymetryczny.
+
+Nie kosztuje to **ani jednego bajtu więcej na ramkę**. Zdarzenie obrażeń było
+wysyłane od zawsze i niesie źródło; doszła w nim jedna flaga „to był zwykły
+atak", a pozycję atakującego klient i tak ma w snapshocie.
+
 **Trzy kanały naraz.** Opisy „game feel" zgadzają się co do jednego: sygnał
 zwrotny działa wtedy, gdy trafia w oczy, uszy i dłonie jednocześnie. Dwa
 pierwsze były od początku (efekty i syntezowany dźwięk), trzeciego nie było.

@@ -5,6 +5,17 @@ import {
 } from '../sim/constants.ts';
 import type { Snapshot } from '../sim/snapshot.ts';
 import { MODIFIER_BANNER_TICKS, pickModifier } from '../sim/modifiers.ts';
+
+/**
+ * Jak długo trzyma się pierścień celu i pierścień napastnika.
+ *
+ * Cel gaśnie szybciej: „bijesz go" przestaje być prawdą w chwili, gdy
+ * przestajesz. „On bije ciebie" warto trzymać dłużej — informacja o
+ * zagrożeniu ma prawo być trochę nieaktualna, bo koszt pomyłki jest
+ * niesymetryczny.
+ */
+const TARGET_MARKER_MS = 900;
+const ATTACKER_MARKER_MS = 1600;
 import {
   getClass,
   MOVE_ABILITY,
@@ -167,6 +178,9 @@ export class Game {
     this.firstRunHints.hidden = true;
     this.buffer.clear();
     this.predictor.reset();
+    this.targetId = -1;
+    this.targetUntil = 0;
+    this.attackers.clear();
     this.screens.hideAll();
 
     // Wariant ogłaszany też na starcie rundy: ekran startowy pokazuje go
@@ -241,6 +255,44 @@ export class Game {
         case 'damage': {
           this.renderer.fx.hit(e.x, e.y, e.amount);
           const now = performance.now();
+
+          // Zwykły atak dostaje własny obraz: smugę od atakującego do celu.
+          //
+          // Do tej pory atak podstawowy był NIEWIDOCZNY — jedyną jego oznaką
+          // była liczba obrażeń nad celem. Przy ataku automatycznym to jest
+          // najgorszy możliwy układ, bo gracz nie naciska przycisku i nie ma
+          // nawet własnego gestu, z którego mógłby wyczytać, co się dzieje.
+          //
+          // Pozycję atakującego bierzemy ze snapshotu, więc nie kosztuje to
+          // ani jednego bajtu więcej na ramkę.
+          if (e.auto) {
+            // Zwód bije na konto właściciela, więc `source` wskazuje na
+            // Kuglarza — a smuga ma wyjść z tego, kto naprawdę uderzył.
+            // Wybieramy bliższe źródło: właściciela albo jego kopię.
+            const owner = snapshot.players.find((p) => p.id === e.source);
+            const decoy = snapshot.decoys
+              .filter((d) => d.ownerId === e.source)
+              .sort(
+                (a, b) =>
+                  Math.hypot(a.x - e.x, a.y - e.y) - Math.hypot(b.x - e.x, b.y - e.y),
+              )[0];
+            const from =
+              owner && decoy
+                ? Math.hypot(decoy.x - e.x, decoy.y - e.y) <
+                  Math.hypot(owner.x - e.x, owner.y - e.y)
+                  ? { ...owner, x: decoy.x, y: decoy.y, id: -1 }
+                  : owner
+                : owner;
+            if (from) {
+              this.renderer.fx.strike(from.x, from.y, e.x, e.y, from.colorIndex);
+              if (from.id >= 0) this.renderer.lunge(from.id, e.x - from.x, e.y - from.y);
+            } else {
+              // Atakujący poza kadrem albo w ukryciu — sam błysk na celu,
+              // bez smugi znikąd.
+              this.renderer.fx.strike(e.x, e.y, e.x, e.y, this.colors.get(e.source) ?? 0);
+            }
+            this.trackCombat(e.source, e.target, now);
+          }
           if (e.target === this.localPlayerId) {
             this.playAt('hurt', e.x, e.y, self, snapshot.tick);
             this.feedback.addNumber(e.x, e.y, e.amount, 'taken', now);
@@ -438,6 +490,26 @@ export class Game {
     }
   }
 
+  /**
+   * Kto kogo bije — pamięć krótka, bo zdarzenia są rzadkie.
+   *
+   * Atak automatyczny pada co 0,46–0,8 s, więc pierścień musi przeżyć przerwę
+   * między ciosami; inaczej migotałby w rytm ataków i byłby nieczytelny.
+   * Z drugiej strony nie może zostawać po walce, bo wtedy kłamie.
+   */
+  private targetUntil = 0;
+  private targetId = -1;
+  private attackers = new Map<number, number>();
+
+  private trackCombat(sourceId: number, targetId: number, now: number): void {
+    if (sourceId === this.localPlayerId) {
+      this.targetId = targetId;
+      this.targetUntil = now + TARGET_MARKER_MS;
+    } else if (targetId === this.localPlayerId) {
+      this.attackers.set(sourceId, now + ATTACKER_MARKER_MS);
+    }
+  }
+
   private draw(now: number, dtSeconds: number): void {
     const state = this.buffer.sample(now);
     if (!state) return;
@@ -463,6 +535,13 @@ export class Game {
       }
     }
     this.feedback.update(now, (x, y, h) => this.renderer.project(x, y, h));
+
+    // Pierścienie relacji odświeżamy co klatkę, po synchronizacji sylwetek.
+    if (now > this.targetUntil) this.targetId = -1;
+    for (const [id, until] of this.attackers) {
+      if (now > until) this.attackers.delete(id);
+    }
+    this.renderer.setCombatMarkers(this.targetId, new Set(this.attackers.keys()));
 
     const controls = this.controls.state;
 

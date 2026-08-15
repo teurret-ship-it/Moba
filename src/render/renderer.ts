@@ -48,6 +48,10 @@ const CAMERA_DISTANCE = 25;
 /** Wygładzanie kamery: 1/s. Wyżej = sztywniej, niżej = bujanie. */
 const CAMERA_LERP = 7;
 
+/** Jak daleko sylwetka wychyla się przy ciosie i jak szybko wraca. */
+const LUNGE_DISTANCE = 0.55;
+const LUNGE_DECAY = 11;
+
 
 interface PlayerVisual {
   root: THREE.Group;
@@ -55,11 +59,22 @@ interface PlayerVisual {
   shadow: THREE.Mesh;
   facing: THREE.Mesh;
   selfRing: THREE.Mesh;
+  /**
+   * Pierścień relacji: „bijesz go" albo „on bije ciebie".
+   *
+   * Osobny od `selfRing`, bo niesie zupełnie inną informację i musi dać się
+   * pokazać na CUDZEJ sylwetce.
+   */
+  marker: THREE.Mesh;
   shield: THREE.Sprite;
   hpBg: THREE.Sprite;
   hpFill: THREE.Sprite;
   /** Wygaszanie po zniknięciu z widoku (ukrycie / wyjście z AoI). */
   fade: number;
+  /** Wypad przy ciosie: 1 = pełne wychylenie, 0 = spoczynek. */
+  lunge: number;
+  lungeX: number;
+  lungeZ: number;
 }
 
 export class ArenaRenderer {
@@ -189,6 +204,51 @@ export class ArenaRenderer {
 
   private applyPixelRatio(): void {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, this.quality.pixelRatioCap));
+  }
+
+  /**
+   * Wypad przy ciosie.
+   *
+   * Sylwetka przesuwa się na moment w stronę celu i wraca. To jest ta część
+   * czytelności, której nie da się załatwić smugą: smuga mówi „stąd dotąd",
+   * a wypad mówi „TA postać właśnie uderzyła". W kotłowaninie sześciu
+   * sylwetek to jest różnica między „ktoś oberwał" a „on go bije".
+   */
+  lunge(playerId: number, dirX: number, dirY: number): void {
+    const visual = this.players.get(playerId);
+    if (!visual) return;
+    const len = Math.hypot(dirX, dirY) || 1;
+    visual.lungeX = (dirX / len) * LUNGE_DISTANCE;
+    visual.lungeZ = -(dirY / len) * LUNGE_DISTANCE;
+    visual.lunge = 1;
+  }
+
+  /**
+   * Kto kogo bije.
+   *
+   * Dwa pierścienie pod nogami, w dwóch kolorach o jednoznacznym znaczeniu:
+   * **bursztynowy = twój cel**, **czerwony = ten, kto bije ciebie**. To jest
+   * najprostsza forma, jaka niesie tę informację, i jedyna, która działa
+   * w kotłowaninie: kolor pod postacią widać kątem oka, ikona nad głową
+   * ginie wśród pasków zdrowia.
+   *
+   * Gdy ktoś jest jednocześnie twoim celem i twoim napastnikiem, wygrywa
+   * czerwony — informacja „ten cię zabija" jest pilniejsza niż „tego bijesz".
+   */
+  setCombatMarkers(targetId: number, attackerIds: ReadonlySet<number>): void {
+    for (const [id, visual] of this.players) {
+      const attacker = attackerIds.has(id);
+      const target = id === targetId;
+      visual.marker.visible = attacker || target;
+      if (!visual.marker.visible) continue;
+      const mat = visual.marker.material as THREE.MeshBasicMaterial;
+      mat.color.setHex(attacker ? 0xff5a5a : 0xffc14d);
+      // Pulsowanie: pierścień statyczny gubi się wśród innych okręgów
+      // na ziemi (Rdzeń, strefa, drop).
+      const pulse = 1 + Math.sin(this.elapsed * 9) * 0.08;
+      visual.marker.scale.setScalar(pulse);
+      mat.opacity = attacker ? 0.95 : 0.8;
+    }
   }
 
   /**
@@ -468,7 +528,14 @@ export class ArenaRenderer {
       const y = useSelf ? self.y : p.y;
       const facing = useSelf ? self.facing : p.facing;
 
-      visual.root.position.set(x, 0, -y);
+      // Wypad wygasa wykładniczo — cios ma być szarpnięciem, nie krokiem.
+      if (visual.lunge > 0.01) visual.lunge *= Math.exp(-LUNGE_DECAY * dt);
+      else visual.lunge = 0;
+      visual.root.position.set(
+        x + visual.lungeX * visual.lunge,
+        0,
+        -y + visual.lungeZ * visual.lunge,
+      );
       visual.root.visible = true;
       visual.fade = Math.min(1, visual.fade + dt * 8);
 
@@ -487,6 +554,8 @@ export class ArenaRenderer {
       // — pełne trafienia obsługuje FxSystem, tu wystarczy pasek.
       visual.facing.rotation.z = -facing;
       visual.selfRing.visible = useSelf;
+      // Domyślnie zgaszony — `setCombatMarkers` zapala go po synchronizacji.
+      visual.marker.visible = false;
 
       visual.shield.visible = p.shieldHp > 0;
       if (visual.shield.visible) {
@@ -531,6 +600,7 @@ export class ArenaRenderer {
       visual.hpBg.visible = false;
       visual.hpFill.visible = false;
       visual.selfRing.visible = false;
+      visual.marker.visible = false;
       visual.shield.visible = false;
       if (visual.fade <= 0.001) visual.root.visible = false;
     }
@@ -596,6 +666,22 @@ export class ArenaRenderer {
     selfRing.visible = false;
     root.add(selfRing);
 
+    // Pierścień relacji — cienki, płaski, pod nogami. Nie zasłania sylwetki
+    // i nie miesza się z tarczą ani z paskiem zdrowia.
+    const marker = new THREE.Mesh(
+      new THREE.RingGeometry(1.45, 1.75, 28),
+      new THREE.MeshBasicMaterial({
+        color: 0xffffff,
+        transparent: true,
+        depthWrite: false,
+        opacity: 0.9,
+      }),
+    );
+    marker.rotation.x = -Math.PI / 2;
+    marker.position.y = 0.14;
+    marker.visible = false;
+    root.add(marker);
+
     // Tarcza Kolosa — bańka wokół sylwetki, widoczna dla wszystkich,
     // bo przeciwnik musi wiedzieć, że teraz nie warto go bić.
     const shield = new THREE.Sprite(
@@ -633,10 +719,14 @@ export class ArenaRenderer {
       shadow,
       facing,
       selfRing,
+      marker,
       shield,
       hpBg,
       hpFill,
       fade: 0,
+      lunge: 0,
+      lungeX: 0,
+      lungeZ: 0,
     };
     this.players.set(id, visual);
     return visual;
@@ -723,6 +813,8 @@ export class ArenaRenderer {
       (visual.facing.material as THREE.Material).dispose();
       visual.selfRing.geometry.dispose();
       (visual.selfRing.material as THREE.Material).dispose();
+      visual.marker.geometry.dispose();
+      (visual.marker.material as THREE.Material).dispose();
       (visual.shield.material as THREE.Material).dispose();
       (visual.hpBg.material as THREE.Material).dispose();
       (visual.hpFill.material as THREE.Material).dispose();

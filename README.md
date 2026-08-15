@@ -480,6 +480,39 @@ bramka w całym planie i najczęściej pomijana.
 
 ---
 
+## Telefon jako urządzenie, nie jako mały ekran
+
+Bramka Fazy 0 brzmi „5 obcych osób gra ≥3 rundy z rzędu bez proszenia".
+Zanim zacznie chodzić o rozgrywkę, chodzi o rzeczy, które nie mają z nią nic
+wspólnego — i potrafią zabić playtest w półtorej minuty.
+
+**Ekran gaśnie.** Runda trwa trzy minuty i przez sporą jej część gracz nie
+DOTYKA ekranu: biegnie, patrzy, czeka na strefę. Android wygasza ekran po
+15–30 sekundach bezczynności dotykowej. Bez blokady wygaszania playtest wygląda
+tak: obcy człowiek gra półtorej minuty, ekran mu gaśnie, on odblokowuje telefon
+i już nie wraca. Gra bierze więc blokadę na starcie rundy — i **oddaje ją na
+końcu**, bo bateria jest zasobem gracza. Dokumentacja Wake Lock wymienia trzy
+pułapki i wszystkie trzy są tu obsłużone: przeglądarka ma prawo odmówić (niski
+poziom baterii), blokada gaśnie sama przy przełączeniu aplikacji i trzeba ją
+wziąć od nowa, a referencję trzeba trzymać, żeby dało się ją zwolnić.
+
+**Gra nie trafia na telefon.** Doszedł manifest: instalacja na ekranie domowym
+bez sklepu, `display: fullscreen`, `orientation: portrait`, ikona proceduralna
+(jeden plik SVG, zgodnie z zasadą zera zasobów binarnych) w wariancie zwykłym
+i maskowalnym. Chromium nie wymaga już service workera do samej instalacji —
+wystarczy manifest i HTTPS. Wersja jednoplikowa ma manifest i ikonę wstawione
+jako `data:`, więc instaluje się tam, gdzie przeglądarka to potrafi; ścieżką
+docelową playtestu jest jednak wersja hostowana, gdzie wszystko leży osobno.
+
+**Obrót w środku walki.** HUD jest zbudowany pod pion i jeden kciuk. Blokadę
+orientacji da się założyć tylko w trybie pełnoekranowym — i tego trybu
+**nie wymuszam**: wskakiwanie na pełny ekran przy pierwszym dotknięciu jest
+dokładnie tym, czego ludzie nie znoszą w grach przeglądarkowych. Blokada
+zakłada się sama tylko wtedy, gdy gracz i tak jest już w pełnym ekranie albo
+zainstalował grę na ekranie domowym.
+
+---
+
 ## Wydajność — i jedna rada z poradnika, która okazała się zła
 
 Sekcja 4 planu stawia twarde budżety: **FPS ≥30 na średnim Androidzie**,
@@ -571,3 +604,15 @@ Iteracja 12 (wydajność):
 
 Rada o scalaniu geometrii została u nas **zmierzona i odrzucona** — powody
 wyżej. Poradnik nie zna twojej sceny.
+
+Iteracja 13 (telefon jako urządzenie):
+
+- [Screen Wake Lock API — MDN](https://developer.mozilla.org/en-US/docs/Web/API/Screen_Wake_Lock_API)
+  i [Stay awake with the Screen Wake Lock API — Chrome for Developers](https://developer.chrome.com/docs/capabilities/web-apis/wake-lock)
+  — try/catch wokół żądania, ponowne pobranie po powrocie widoczności,
+  trzymanie referencji, zwalnianie po zakończeniu zadania.
+- [Making PWAs installable — MDN](https://developer.mozilla.org/en-US/docs/Web/Progressive_web_apps/Guides/Making_PWAs_installable)
+  i [Web app manifest — web.dev](https://web.dev/learn/pwa/web-app-manifest)
+  — komplet pól wymaganych do instalacji, tryby wyświetlania, ikony maskowalne.
+- [PWA — The Web Almanac 2025](https://almanac.httparchive.org/en/2025/pwa)
+  — stan wymagań instalacyjnych: w Chromium sam manifest i HTTPS wystarczą.

@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!--
+    Ikona proceduralna, jak cała reszta grafiki w tym projekcie: jeden plik
+    tekstowy, zero zasobów binarnych. Cel („maskable") wymaga, żeby treść
+    mieściła się w bezpiecznym okręgu o 80% szerokości — systemy przycinają
+    ikonę do własnego kształtu i róg z zawartością zniknąłby.
+  -->
+  <rect width="512" height="512" fill="#0b0e15"/>
+  <circle cx="256" cy="256" r="150" fill="none" stroke="#4fc3f7" stroke-width="28"/>
+  <circle cx="256" cy="256" r="66" fill="#4fc3f7"/>
+  <circle cx="256" cy="256" r="26" fill="#0b0e15"/>
+</svg>

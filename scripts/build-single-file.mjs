@@ -70,6 +70,26 @@ const js = await readFile(join(outDir, jsMatch[1].replace(/^\.?\//, '')), 'utf8'
 const safeJs = js.replace(/<\/script>/gi, () => '<\\/script>');
 html = html.replace(jsMatch[0], () => `<script type="module">\n${safeJs}\n</script>`);
 
+// --- wstaw manifest i ikonę jako data: ---
+// Pojedynczy plik musi działać otwarty z dowolnego miejsca, także z dysku,
+// więc manifest nie może wskazywać na sąsiedni plik. Ikona wchodzi w manifest
+// jako data:, a manifest w dokument — też jako data:.
+//
+// To jest wariant awaryjny, nie główny: instalacja z pojedynczego pliku
+// działa nierówno między przeglądarkami. Ścieżką docelową dla playtestu
+// jest wersja hostowana (dist-single/index.html + manifest.webmanifest),
+// gdzie wszystko leży osobno i po HTTPS.
+const iconSvg = await readFile(join(outDir, 'icon.svg'), 'utf8');
+const iconUrl = `data:image/svg+xml;base64,${Buffer.from(iconSvg, 'utf8').toString('base64')}`;
+const manifest = JSON.parse(await readFile(join(outDir, 'manifest.webmanifest'), 'utf8'));
+manifest.icons = manifest.icons.map((icon) => ({ ...icon, src: iconUrl }));
+const manifestUrl =
+  'data:application/manifest+json;base64,' +
+  Buffer.from(JSON.stringify(manifest), 'utf8').toString('base64');
+
+html = html.replace(/<link[^>]+rel="manifest"[^>]*>/, () => `<link rel="manifest" href="${manifestUrl}" />`);
+html = html.replace(/<link[^>]+rel="apple-touch-icon"[^>]*>/, () => `<link rel="apple-touch-icon" href="${iconUrl}" />`);
+
 await mkdir(outDir, { recursive: true });
 
 // --- pełny dokument ---

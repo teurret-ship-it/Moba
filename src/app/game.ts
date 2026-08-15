@@ -18,6 +18,7 @@ import { Sfx } from '../audio/sfx.ts';
 import { CombatFeedback } from '../ui/feedback.ts';
 import { RecordStore } from './records.ts';
 import { Haptics, SettingsStore } from './settings.ts';
+import { ScreenAwake, tryLockPortrait } from './device.ts';
 import { TICK_HZ as SIM_HZ } from '../sim/constants.ts';
 
 /**
@@ -51,6 +52,7 @@ export class Game {
   private readonly records = new RecordStore();
   private readonly settings = new SettingsStore();
   private readonly haptics = new Haptics(this.settings);
+  private readonly awake = new ScreenAwake();
   private readonly firstRunHints: HTMLElement;
 
   private transport: LocalTransport | null = null;
@@ -144,6 +146,10 @@ export class Game {
     this.buffer.clear();
     this.predictor.reset();
     this.screens.hideAll();
+
+    // Ekran ma nie gasnąć w trakcie rundy, ale tylko w trakcie rundy.
+    this.awake.enable();
+    tryLockPortrait();
 
     this.transport = new LocalTransport(
       {
@@ -442,6 +448,8 @@ export class Game {
     this.running = false;
     cancelAnimationFrame(this.rafHandle);
     this.controls.releaseAll();
+    // Runda się skończyła — bateria wraca do gracza.
+    this.awake.disable();
 
     const result = transport.sim.result();
     this.sfx.play(result.winner === this.localPlayerId ? 'win' : 'death');
@@ -576,6 +584,7 @@ export class Game {
     document.removeEventListener('visibilitychange', this.onVisibilityChange);
     window.removeEventListener('keydown', this.onKeyDown);
     this.controls.dispose();
+    this.awake.dispose();
     this.transport?.dispose();
     this.renderer.dispose();
     this.sfx.dispose();

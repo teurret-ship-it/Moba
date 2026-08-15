@@ -173,11 +173,23 @@ export function tryStartMove(
     return true;
   }
 
-  let dx = input.moveX;
-  let dy = input.moveY;
-  const len = Math.hypot(dx, dy);
+  // Kolejność: przeciągnięcie po przycisku, potem gałka, na końcu kierunek
+  // patrzenia. Drugi człon to odpowiednik ustawienia „skok w stronę ruchu"
+  // znanego z tego gatunku — tapnięcie ma wysyłać tam, dokąd biegniesz,
+  // bo w 90% przypadków dokładnie o to chodzi.
+  //
+  // Slot RUCH celuje TYLKO ręcznie albo z ruchu: automatyczne naprowadzanie
+  // na wroga wpychałoby uciekającego gracza prosto w niego.
+  let dx = input.aimX;
+  let dy = input.aimY;
+  let len = Math.hypot(dx, dy);
+  if (len <= 0.2) {
+    dx = input.moveX;
+    dy = input.moveY;
+    len = Math.hypot(dx, dy);
+  }
   if (len < 0.001) {
-    // Brak kierunku z gałki — skacz tam, gdzie patrzysz.
+    // Brak kierunku skądkolwiek — skacz tam, gdzie patrzysz.
     dx = Math.cos(p.facing);
     dy = Math.sin(p.facing);
   } else {

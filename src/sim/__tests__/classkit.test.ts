@@ -235,17 +235,24 @@ describe('karty i cecha Widma', () => {
     expect(move).toBe('mgnienie');
   });
 
-  it('cecha: eliminacja natychmiast odnawia Cień', () => {
+  it('cecha: eliminacja skraca odnowienie Cienia o połowę', () => {
+    // Pierwotnie był to pełny reset i wtedy był potrzebny — Rozdarcie
+    // w praktyce chybiało, więc klasa potrzebowała wszystkiego, co się dało.
+    // Po naprawieniu celowania bonus zaczął się kumulować w pętlę
+    // „eliminacja → ukrycie → zasadzka → eliminacja". Połowa zostawia
+    // nagrodę i przerywa pętlę.
     const s = arena('widmo', 7);
     const p = s.world.players[0]!;
     const victim = s.world.players[1]!;
 
     s.pushInput(0, input({ seq: 1, stealth: true }));
     s.step();
-    expect(p.cdTrick).toBeGreaterThan(s.world.tick);
+    const before = p.cdTrick - s.world.tick;
+    expect(before).toBeGreaterThan(0);
 
     killPlayer(s.world, victim, p.id);
-    expect(p.cdTrick).toBeLessThanOrEqual(s.world.tick);
+    const after = p.cdTrick - s.world.tick;
+    expect(after).toBe(Math.floor(before / 2));
   });
 
   it('cecha należy tylko do Widma', () => {

@@ -29,9 +29,24 @@ const JOYSTICK_RADIUS_MIN = 50;
 const JOYSTICK_RADIUS_MAX = 74;
 const DEAD_ZONE_FRACTION = 0.12;
 
+/**
+ * Ile palec musi przejechać, żeby to było celowanie, a nie tapnięcie.
+ *
+ * Poniżej tego progu ruch jest drżeniem ręki, nie zamiarem. Za mały próg
+ * odbiera celowanie automatyczne ludziom, którzy nie trzymają telefonu
+ * nieruchomo; za duży sprawia, że ręczne celowanie wymaga zamachu.
+ */
+const AIM_DRAG_THRESHOLD = 16;
+
 export interface ControlsState {
   moveX: number;
   moveY: number;
+  /** Kierunek celowania z przeciągnięcia po przycisku; (0,0) = automat. */
+  aimX: number;
+  aimY: number;
+  /** Który przycisk jest właśnie przeciągany — do rysowania wskaźnika. */
+  aiming: 'dash' | 'stealth' | 'burst' | null;
+  aimStrength: number;
   /** Do rysowania gałki. */
   joystickActive: boolean;
   joystickBaseX: number;
@@ -50,6 +65,10 @@ export class Controls {
   readonly state: ControlsState = {
     moveX: 0,
     moveY: 0,
+    aimX: 0,
+    aimY: 0,
+    aiming: null,
+    aimStrength: 0,
     joystickActive: false,
     joystickBaseX: 0,
     joystickBaseY: 0,
@@ -63,6 +82,9 @@ export class Controls {
   private pendingBurst = false;
   /** Wybrana karta ulepszenia (indeks) albo -1. */
   private pendingPick = -1;
+  /** Kierunek celowania wysłany razem z najbliższą umiejętnością. */
+  private pendingAimX = 0;
+  private pendingAimY = 0;
 
   private seq = 0;
   private joystickPointerId: number | null = null;
@@ -76,9 +98,9 @@ export class Controls {
     buttons: { dash: HTMLElement; stealth: HTMLElement; burst: HTMLElement },
   ) {
     this.bindTouch();
-    this.bindButton(buttons.dash, () => (this.pendingDash = true));
-    this.bindButton(buttons.stealth, () => (this.pendingStealth = true));
-    this.bindButton(buttons.burst, () => (this.pendingBurst = true));
+    this.bindButton(buttons.dash, 'dash', () => (this.pendingDash = true));
+    this.bindButton(buttons.stealth, 'stealth', () => (this.pendingStealth = true));
+    this.bindButton(buttons.burst, 'burst', () => (this.pendingBurst = true));
     this.bindKeyboard();
   }
 
@@ -122,6 +144,8 @@ export class Controls {
       seq: ++this.seq,
       moveX,
       moveY,
+      aimX: this.pendingAimX,
+      aimY: this.pendingAimY,
       dash: this.pendingDash,
       stealth: this.pendingStealth,
       burst: this.pendingBurst,
@@ -132,6 +156,8 @@ export class Controls {
     this.pendingStealth = false;
     this.pendingBurst = false;
     this.pendingPick = -1;
+    this.pendingAimX = 0;
+    this.pendingAimY = 0;
     return frame;
   }
 
@@ -148,6 +174,10 @@ export class Controls {
     this.state.joystickActive = false;
     this.state.moveX = 0;
     this.state.moveY = 0;
+    this.state.aiming = null;
+    this.state.aimX = 0;
+    this.state.aimY = 0;
+    this.state.aimStrength = 0;
     this.pendingDash = false;
     this.pendingStealth = false;
     this.pendingBurst = false;
@@ -236,26 +266,103 @@ export class Controls {
     });
   }
 
-  private bindButton(el: HTMLElement, fire: () => void): void {
+  /**
+   * Przycisk umiejętności: tapnięcie albo przeciągnięcie.
+   *
+   * To jest standard tego gatunku na telefonie, wypracowany przez lata i taki
+   * sam w każdej dużej pozycji: TAPNIĘCIE odpala umiejętność z celowaniem
+   * automatycznym, PRZECIĄGNIĘCIE z przycisku celuje ręcznie i puszczenie
+   * strzela. Obie ścieżki są potrzebne — automat wygrywa z bliska
+   * i w zamieszaniu, ręczny na dystansie i przy strzale na wyprzedzenie —
+   * a dobrzy gracze przełączają się między nimi w trakcie walki.
+   *
+   * Dwie rzeczy, które łatwo tu zepsuć i które są tu zrobione świadomie:
+   *
+   *  - **umiejętność odpala się przy PUSZCZENIU, nie przy dotknięciu.**
+   *    Inaczej każde przeciągnięcie strzelałoby dwa razy: raz na starcie
+   *    z automatu, raz na końcu ręcznie.
+   *  - **jest próg.** Poniżej kilkunastu pikseli ruch palca to drżenie ręki,
+   *    a nie zamiar — takie „przeciągnięcie" musi liczyć się jako tapnięcie,
+   *    bo inaczej celowanie automatyczne przestaje działać dla ludzi,
+   *    którzy nie trzymają telefonu w imadle.
+   */
+  private bindButton(el: HTMLElement, key: 'dash' | 'stealth' | 'burst', fire: () => void): void {
+    let pointerId: number | null = null;
+    let startX = 0;
+    let startY = 0;
+
+    const clearAim = () => {
+      this.state.aiming = null;
+      this.state.aimX = 0;
+      this.state.aimY = 0;
+      this.state.aimStrength = 0;
+    };
+
     const onDown = (e: PointerEvent) => {
       e.preventDefault();
       e.stopPropagation();
-      fire();
+      if (pointerId !== null) return;
+      pointerId = e.pointerId;
+      startX = e.clientX;
+      startY = e.clientY;
       el.classList.add('is-pressed');
-      // Haptyka: krótki impuls potwierdza akcję bez patrzenia na przycisk.
+      el.setPointerCapture?.(e.pointerId);
+      // Haptyka: krótki impuls potwierdza dotknięcie bez patrzenia na przycisk.
       navigator.vibrate?.(12);
     };
-    const onUp = () => el.classList.remove('is-pressed');
+
+    const onMove = (e: PointerEvent) => {
+      if (e.pointerId !== pointerId) return;
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+      const dist = Math.hypot(dx, dy);
+      if (dist < AIM_DRAG_THRESHOLD) {
+        clearAim();
+        el.classList.remove('is-aiming');
+        return;
+      }
+      // Przycisk mówi, że jest w trybie celowania — inaczej gracz nie wie,
+      // że przeciąganie w ogóle coś robi, dopóki nie puści.
+      el.classList.add('is-aiming');
+      const reach = this.joystickRadius();
+      this.state.aiming = key;
+      this.state.aimX = dx / dist;
+      // Ekran ma Y w dół, świat ma Y w górę.
+      this.state.aimY = -dy / dist;
+      this.state.aimStrength = Math.min(1, (dist - AIM_DRAG_THRESHOLD) / reach);
+      e.preventDefault();
+    };
+
+    const onUp = (e: PointerEvent) => {
+      el.classList.remove('is-pressed');
+      el.classList.remove('is-aiming');
+      if (e.pointerId !== pointerId) return;
+      pointerId = null;
+      // Kierunek jedzie razem z umiejętnością — (0,0) znaczy „celuj sam".
+      this.pendingAimX = this.state.aiming === key ? this.state.aimX : 0;
+      this.pendingAimY = this.state.aiming === key ? this.state.aimY : 0;
+      fire();
+      clearAim();
+    };
+
+    const onCancel = (e: PointerEvent) => {
+      el.classList.remove('is-pressed');
+      el.classList.remove('is-aiming');
+      if (e.pointerId !== pointerId) return;
+      // Anulowanie to anulowanie: palec zjechał gdzie indziej, nie strzelamy.
+      pointerId = null;
+      clearAim();
+    };
 
     el.addEventListener('pointerdown', onDown, { passive: false });
+    el.addEventListener('pointermove', onMove, { passive: false });
     el.addEventListener('pointerup', onUp);
-    el.addEventListener('pointercancel', onUp);
-    el.addEventListener('pointerleave', onUp);
+    el.addEventListener('pointercancel', onCancel);
     this.disposers.push(() => {
       el.removeEventListener('pointerdown', onDown);
+      el.removeEventListener('pointermove', onMove);
       el.removeEventListener('pointerup', onUp);
-      el.removeEventListener('pointercancel', onUp);
-      el.removeEventListener('pointerleave', onUp);
+      el.removeEventListener('pointercancel', onCancel);
     });
   }
 

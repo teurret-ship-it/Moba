@@ -4,7 +4,13 @@ import {
   TICK_MS,
 } from '../sim/constants.ts';
 import type { Snapshot } from '../sim/snapshot.ts';
-import { POWER_ABILITY, type ClassId } from '../sim/classes.ts';
+import {
+  getClass,
+  MOVE_ABILITY,
+  POWER_ABILITY,
+  TRICK_ABILITY,
+  type ClassId,
+} from '../sim/classes.ts';
 import { generateTerrain } from '../sim/terrain.ts';
 import { SnapshotBuffer } from '../client/interpolation.ts';
 import { Predictor } from '../client/prediction.ts';
@@ -431,6 +437,22 @@ export class Game {
     this.feedback.update(now, (x, y, h) => this.renderer.project(x, y, h));
 
     const controls = this.controls.state;
+
+    // Wskaźnik celowania. Zasięg bierzemy z tej umiejętności, którą gracz
+    // właśnie przeciąga — inaczej pas kłamałby o tym, dokąd sięga cios.
+    const aimPos = self ?? this.latestSnapshot?.self ?? null;
+    if (controls.aiming && aimPos) {
+      this.renderer.setAim(
+        true,
+        aimPos.x,
+        aimPos.y,
+        Math.atan2(controls.aimY, controls.aimX),
+        aimRange(this.localClass, controls.aiming),
+      );
+    } else {
+      this.renderer.setAim(false, 0, 0, 0, 0);
+    }
+
     this.hud.setJoystick(
       controls.joystickActive,
       controls.joystickBaseX,
@@ -596,4 +618,26 @@ function required(root: HTMLElement, selector: string): HTMLElement {
   const el = root.querySelector<HTMLElement>(selector);
   if (!el) throw new Error(`Gra: brak elementu ${selector}`);
   return el;
+}
+
+/**
+ * Zasięg pokazywany przez wskaźnik celowania.
+ *
+ * Wskaźnik ma mówić prawdę o TEJ umiejętności, którą gracz trzyma pod kciukiem.
+ * Pas o stałej długości byłby ładniejszy i mylący — a mylący wskaźnik jest
+ * gorszy niż żaden, bo gracz zaczyna mu ufać.
+ */
+function aimRange(classId: ClassId, slot: 'dash' | 'stealth' | 'burst'): number {
+  const cls = getClass(classId);
+  if (slot === 'dash') {
+    const move = MOVE_ABILITY[cls.move];
+    return move.speed * move.durationTicks * (1 / TICK_HZ);
+  }
+  if (slot === 'stealth') {
+    // Celowanie ma sens tylko dla Zwodu — Cień i Tarcza działają na sobie,
+    // więc wskaźnik dla nich byłby obietnicą bez pokrycia.
+    return cls.trick === 'zwod' ? TRICK_ABILITY.zwod.throwDistance : 0;
+  }
+  const power = POWER_ABILITY[cls.power];
+  return 'range' in power ? power.range : power.radius;
 }

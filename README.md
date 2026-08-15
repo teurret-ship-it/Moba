@@ -37,8 +37,8 @@ przy jednej ręce na telefonie to warunek, nie wygoda.
 |---|---|---|---|---|
 | **Łowca** | koło, 100 HP | ➤ Skok | ◍ Cień | ⁙ Salwa — 3 strzały z dystansu |
 | **Kolos** | sześciokąt, 120 HP | ⏵ Szarża — tratuje i odrzuca | ❖ Tarcza — pochłania 40 obrażeń | ✸ Fala — wybuch dookoła |
-| **Widmo** | grot, 102 HP | ⇢ Mgnienie — teleport przez mur | ◍ Cień | ✦ Rozdarcie — stożek, z ukrycia ×2 |
-| **Kuglarz** | dwa koła, 112 HP | ⇄ Zamiana — zamiana miejsc z kopią | ⧉ Zwód — kopia rzucana przed siebie | ❋ Sidła — obszarowe spowolnienie |
+| **Widmo** | grot, 92 HP | ⇢ Mgnienie — teleport przez mur | ◍ Cień | ✦ Rozdarcie — stożek, z ukrycia ×2 |
+| **Kuglarz** | dwa koła, 112 HP | ⇄ Zamiana — zamiana miejsc z kopią | ⧉ Zwód — kopia rzucana przed siebie, która strzela | ❋ Sidła — rzucane pole spowolnienia |
 
 **Kuglarz nie walczy o pozycję — walczy o to, gdzie przeciwnik myśli, że jesteś.**
 Cała jego trójka działa razem: stawiasz kopię, wróg bije w nią, ty zamieniasz się
@@ -58,6 +58,43 @@ w wybranym momencie, a nie dlatego, że wróg wszedł w zasięg.
 **Cecha klasy.** Widmo ma jedyną cechę działającą bez przycisku: *eliminacja
 natychmiast odnawia Cień*. Powód jest w pomiarze, nie w fikcji — patrz sekcja
 o balansie niżej.
+
+### Celowanie — standard gatunku
+
+**Tapnięcie celuje samo, przeciągnięcie celujesz ty.** To jest jeden układ,
+który na telefonie wypracował cały gatunek i który wygląda tak samo w każdej
+dużej pozycji: przycisk umiejętności odpala ją z celowaniem automatycznym,
+a przeciągnięcie z tego samego przycisku daje kierunek ręcznie. Obie ścieżki
+są potrzebne — automat wygrywa z bliska i w zamieszaniu, ręczny na dystansie
+i przy strzale na wyprzedzenie — a gracz przełącza się między nimi w trakcie
+walki, nie w ustawieniach.
+
+Rozstrzyga to serwer. Klient przysyła **wektor**, nigdy celu ani trafienia,
+a symulacja go normalizuje i sama decyduje, co on znaczy dla danej
+umiejętności. Kolejność wyboru kierunku:
+
+1. wektor od gracza (przeciągnął, więc wie, czego chce),
+2. automat na najbliższego widocznego wroga **w zasięgu samej umiejętności**,
+3. kierunek marszu — odpowiednik ustawienia „umiejętność w stronę ruchu",
+4. kierunek patrzenia, żeby przycisk nigdy nie okazał się martwy.
+
+Slot RUCH pomija punkt 2 celowo: automat wpychałby uciekającego gracza prosto
+w to, przed czym ucieka.
+
+Trzy rzeczy, które przy tym łatwo zepsuć i które są zrobione świadomie:
+
+- **umiejętność odpala się przy PUSZCZENIU**, nie przy dotknięciu — inaczej
+  każde przeciągnięcie strzelałoby dwa razy;
+- **jest próg 16 px** — poniżej niego ruch palca to drżenie ręki, a nie zamiar;
+- **kierunek zapamiętuje się w chwili wciśnięcia**, nie odczytuje przy
+  detonacji. Między jednym a drugim mija zwłoka, a w tym czasie auto-atak
+  przestawia sylwetkę na własny cel. Bez tego ręczne celowanie nie działało
+  dokładnie wtedy, gdy jest potrzebne: w walce.
+
+Do tego wskaźnik na ziemi — pas od postaci w stronę przeciągnięcia, długi na
+tyle, ile naprawdę sięga TA umiejętność. Kciuk zasłania pół ekranu, więc
+kierunek przeciągnięcia po przycisku sam z siebie nie mówi nic o tym, gdzie
+stoi postać.
 
 ### Sterowanie
 
@@ -339,14 +376,21 @@ narzędziem strojenia.
 
 Zmierzony stan (400 rund, błąd standardowy przy rozkładzie Poissona):
 
-| | początek iteracji 10 | koniec |
-|---|---|---|
-| Łowca | 1,49 ± 0,12 | **1,15 ± 0,11** |
-| Kolos | 1,28 ± 0,11 | **1,21 ± 0,11** |
-| Widmo | 0,56 ± 0,07 | **0,87 ± 0,09** |
-| Kuglarz | 0,69 ± 0,08 | **0,78 ± 0,09** |
+| | pocz. iter. 10 | koniec iter. 10 | po celowaniu | koniec iter. 14 |
+|---|---|---|---|---|
+| Łowca | 1,49 ± 0,12 | 1,15 ± 0,11 | 0,63 ± 0,08 | **0,91 ± 0,10** |
+| Kolos | 1,28 ± 0,11 | 1,21 ± 0,11 | 0,43 ± 0,07 | **1,00 ± 0,10** |
+| Widmo | 0,56 ± 0,07 | 0,87 ± 0,09 | 2,56 ± 0,16 | **1,09 ± 0,10** |
+| Kuglarz | 0,69 ± 0,08 | 0,78 ± 0,09 | 0,33 ± 0,06 | **0,99 ± 0,10** |
 
-Rozrzut spadł z 0,93 do 0,43.
+Rozrzut: 0,93 → 0,43 → **0,18**. Najciaśniejszy w historii projektu.
+
+Kolumna „po celowaniu" jest tu nie dla ozdoby. Naprawienie celowania podniosło
+Widmo z 0,87 na **2,56** — bo jego moc przez cały czas leciała tam, gdzie
+akurat patrzył auto-atak, czyli w praktyce często chybiała. Klasa była
+zbalansowana wokół **zepsutej umiejętności**, a wszystkie jej liczby opisywały
+nie projekt, tylko usterkę. To ta sama lekcja co przy Zamianie Kuglarza, tylko
+w drugą stronę.
 
 > **Sonda na 120 rundach mnie okłamywała.** Odczyt „1,14 / 1,28 / 0,62 / 0,96",
 > na podstawie którego zamknąłem poprzednią iterację, przy 400 rundach okazał
@@ -604,6 +648,16 @@ Iteracja 12 (wydajność):
 
 Rada o scalaniu geometrii została u nas **zmierzona i odrzucona** — powody
 wyżej. Poradnik nie zna twojej sceny.
+
+Iteracja 14 (standardy rynkowe sterowania):
+
+- [Aiming — Pro Brawl Stars Tips'n'Tricks](https://pro-brawl-stars-tipsntricks.fandom.com/wiki/Aiming)
+  — tapnięcie kontra przeciągnięcie, kiedy który wariant wygrywa.
+- [Best Brawl Stars Control Settings](https://ar-pay.com/blog/en/articles/brawl-stars/)
+  — rozmiar przycisku ataku wobec wygody przeciągania, przełączanie się
+  między celowaniem automatycznym a ręcznym w trakcie walki.
+- [The best Wild Rift gameplay settings for mobile devices](https://dotesports.com/mobile/news/the-best-wild-rift-gameplay-settings-for-mobile-devices)
+  — ustawienie „skok w kierunku ruchu" i celowanie umiejętności kierunkowych.
 
 Iteracja 13 (telefon jako urządzenie):
 

@@ -172,6 +172,9 @@ function fromSelfView(self: SelfView): PlayerState {
     shieldEndTick: -1,
 
     powerFireTick: -1,
+    powerFacing: 0,
+    powerX: 0,
+    powerY: 0,
     salvoLeft: 0,
     salvoNextTick: -1,
     salvoTargetId: -1,

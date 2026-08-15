@@ -24,6 +24,21 @@ export interface InputFrame {
   stealth: boolean;
   burst: boolean;
   /**
+   * Kierunek celowania, znormalizowany albo (0,0) = „celuj sam".
+   *
+   * Standard rynkowy dla tego gatunku na telefonie jest jeden i wypracowany
+   * przez lata: TAPNIĘCIE przycisku umiejętności celuje automatycznie,
+   * PRZECIĄGNIĘCIE z przycisku celuje ręcznie. Obie metody są potrzebne
+   * i dobrzy gracze przełączają się między nimi zależnie od sytuacji —
+   * automat wygrywa z bliska i w zamieszaniu, ręczny na dystansie
+   * i przy strzale na wyprzedzenie.
+   *
+   * Wektor jest przysyłany, ale nie jest rozkazem: serwer normalizuje go
+   * i sam decyduje, co znaczy dla danej umiejętności (sekcja 3).
+   */
+  aimX: number;
+  aimY: number;
+  /**
    * Wybór karty ulepszenia: indeks 0..2, albo -1 gdy gracz nic nie wybrał.
    * Klient przysyła NUMER KARTY, nigdy efektu — serwer waliduje go wobec
    * oferty, którą sam wystawił (sekcja 3: zasada zaufania).
@@ -32,7 +47,10 @@ export interface InputFrame {
 }
 
 export function emptyInput(seq = 0): InputFrame {
-  return { seq, moveX: 0, moveY: 0, dash: false, stealth: false, burst: false, pick: -1 };
+  return {
+    seq, moveX: 0, moveY: 0, aimX: 0, aimY: 0,
+    dash: false, stealth: false, burst: false, pick: -1,
+  };
 }
 
 export type AbilityKey = 'dash' | 'stealth' | 'burst';
@@ -78,6 +96,18 @@ export interface PlayerState {
 
   /** Slot MOCY: tick detonacji (Fala/Rozdarcie) lub startu Salwy. */
   powerFireTick: number;
+  /**
+   * Kierunek, w którym poleci moc — zapamiętany W CHWILI WCIŚNIĘCIA.
+   *
+   * Nie da się użyć do tego `facing`, bo auto-atak przestawia go co cios,
+   * a moc odpala się dopiero po zwłoce. Bez osobnego pola ręcznie wycelowane
+   * Rozdarcie leciało tam, gdzie akurat strzelał automat — czyli ręczne
+   * celowanie nie działało zawsze wtedy, gdy było potrzebne: w walce.
+   */
+  powerFacing: number;
+  /** Środek obszaru mocy rzucanej (Sidła) — ustalany w chwili wciśnięcia. */
+  powerX: number;
+  powerY: number;
   /** Salwa: ile strzałów zostało i kiedy następny. */
   salvoLeft: number;
   salvoNextTick: number;
@@ -144,10 +174,11 @@ export type BotMood = 'roam' | 'hunt' | 'flee' | 'loot' | 'rezone' | 'core';
 /**
  * Zwód — nieruchoma kopia właściciela.
  *
- * Osobny byt, nie gracz: nie porusza się, nie strzela i nie liczy się do
- * warunku zwycięstwa. Ma za to pozycję, zdrowie i wygląd właściciela, bo
- * jego jedynym zadaniem jest ściągnąć na siebie cios, który miał trafić
- * w kogoś innego.
+ * Osobny byt, nie gracz: nie porusza się i nie liczy się do warunku
+ * zwycięstwa. Ma za to pozycję, zdrowie i wygląd właściciela — a od
+ * niedawna także jego atak, w osłabionej wersji. Kopia, która tylko
+ * pochłania ciosy, jest kosztem przeciwnika; kopia, która strzela, zmusza
+ * go do decyzji: bić w nią czy w tego, kto ją postawił.
  */
 export interface Decoy {
   id: number;
@@ -159,6 +190,8 @@ export interface Decoy {
   colorIndex: number;
   classId: ClassId;
   endTick: number;
+  /** Odnowienie własnego ataku kopii — patrz `stepDecoys`. */
+  cdAttack: number;
 }
 
 export type PickupKind = 'heal' | 'speed' | 'damage';

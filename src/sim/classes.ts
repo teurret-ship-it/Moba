@@ -115,7 +115,11 @@ export const CLASSES: Record<ClassId, ClassDef> = {
     id: 'widmo',
     name: 'Widmo',
     tagline: 'Zabija z zaskoczenia. Kruche — jeśli je zobaczysz, już przegrało.',
-    maxHp: 102,
+    // 102 -> 92. Opis mówi „kruche", a pomiar mówił co innego: Widmo miało
+    // NAJDŁUŻSZE przeżycie w całej stawce (90 s wobec 73-82 s) przy
+    // najwyższych eliminacjach. Szklana armata, która nie jest szklana,
+    // jest po prostu armatą.
+    maxHp: 92,
     speed: 10.6,
     attackRange: 6.0,
     attackDamage: 5.6,
@@ -187,7 +191,10 @@ export const MOVE_ABILITY = {
   // Teleport: zero czasu trwania, więc nie da się go przerwać ani trafić
   // w locie. Za to krótszy dystans i brak obrażeń.
   mgnienie: {
-    cooldownTicks: Math.round(4 * TICK_HZ),
+    // 4 s -> 5 s. Najkrótsze odnowienie slotu RUCH w całej stawce (reszta
+    // ma 5-7 s), a Widmo używa go i do wejścia, i do wyjścia. Po naprawieniu
+    // celowania klasa zaczęła wygrywać oba te momenty naraz.
+    cooldownTicks: Math.round(5 * TICK_HZ),
     durationTicks: 1,
     speed: 210,
     damage: 0,
@@ -236,6 +243,16 @@ export const TRICK_ABILITY = {
     // Kopia musi wytrzymać na tyle długo, żeby zdążyć się z nią zamienić.
     hp: 60,
     /**
+     * Kopia strzela — słabiej i rzadziej niż właściciel.
+     *
+     * Ułamek, nie liczba: kopia ma skalować się razem z postacią, więc
+     * ulepszenia obrażeń działają też na nią. 45% i wolniejszy rytm ustawiają
+     * ją jako groźbę, a nie jako drugiego gracza.
+     */
+    damageShare: 0.45,
+    attackCooldownTicks: Math.round(0.8 * TICK_HZ),
+    attackRange: 6.0,
+    /**
      * Jak daleko przed siebie leci kopia.
      *
      * Nieco mniej niż zasięg auto-ataku Kuglarza (6,5): rzucona w stronę
@@ -268,16 +285,36 @@ export const POWER_ABILITY = {
   // Stożek przed sobą. Krótki zasięg, wysokie obrażenia — i podwójne,
   // jeśli wychodzisz z ukrycia. To jest cała ekonomia Widma.
   rozdarcie: {
-    // 7 s -> 6 s. Widmo ma dobre eliminacje (1,03 na postać) i normalne
-    // przeżycie, ale najgorszą zamianę tego na wygrane (0,56 +/- 0,07) —
-    // przegrywa końcówkę, w której liczy się, ile razy zdąży zadać cios
-    // z ukrycia, zanim skończy się dystans do uciekania.
-    cooldownTicks: Math.round(6 * TICK_HZ),
+    // Powrót do 7 s po skróceniu do 6 s.
+    //
+    // Skrócenie było odpowiedzią na wsp. 0,56 Widma i wtedy było słuszne.
+    // Zmieniło je jednak co innego: odkąd celowanie automatyczne szuka celu
+    // w zasięgu SAMEJ umiejętności (7,5), a nie auto-ataku (6,0), Rozdarcie
+    // trafia w cele, których wcześniej nie umiało wskazać. Widmo skoczyło do
+    // wsp. 2,55 przy 1,96 eliminacji na postać — czyli poprawka celowania
+    // była zarazem sporym wzmocnieniem tej jednej klasy.
+    cooldownTicks: Math.round(7 * TICK_HZ),
     windupTicks: Math.round(0.12 * TICK_HZ),
     range: 7.5,
-    /** Połowa kąta stożka w radianach. */
-    halfAngle: Math.PI * 0.42,
-    damage: 34,
+    /**
+     * Połowa kąta stożka w radianach.
+     *
+     * 0,42π (151° rozwarcia) to nie był stożek, tylko półokrąg — przy takim
+     * kącie celowanie nie miało znaczenia, bo trafiało się we wszystko przed
+     * sobą. 0,3π daje 108°: nadal wybaczające na telefonie, ale już nagradza
+     * pokazanie kierunku.
+     */
+    halfAngle: Math.PI * 0.3,
+    // 34 -> 22.
+    //
+    // Sama umiejętność się nie zmieniła — zmieniła się jej SKUTECZNOŚĆ.
+    // Zanim celowanie zaczęło działać, stożek leciał tam, gdzie akurat
+    // patrzył auto-atak, więc w praktyce często chybiał; klasa była
+    // zbalansowana wokół zepsutej umiejętności. Po naprawieniu Widmo skoczyło
+    // z wsp. 0,87 na 2,56 przy 1,87 eliminacji na postać. To jest ta sama
+    // lekcja co przy Zamianie Kuglarza, tylko w drugą stronę: liczby
+    // opisujące mechanikę są warte tyle, ile jej działanie.
+    damage: 22,
     ambushMultiplier: 2.0,
   },
   // Sidła nie zadają obrażeń — spowalniają. To jest narzędzie kontroli:
@@ -285,9 +322,21 @@ export const POWER_ABILITY = {
   sidla: {
     cooldownTicks: Math.round(11 * TICK_HZ),
     windupTicks: Math.round(0.2 * TICK_HZ),
-    radius: 8.0,
-    /** Mnożnik prędkości dla złapanych. */
-    slowMul: 0.55,
+    // Promień zmniejszony z 8,0, bo pole przestało wybuchać pod nogami
+    // i zaczęło być rzucane — obszar o promieniu 8 rzucany na 9 jednostek
+    // pokrywałby pół areny końcowej.
+    radius: 6.5,
+    /** Jak daleko da się rzucić środek pola. */
+    throwRange: 9.0,
+    /**
+     * Mnożnik prędkości dla złapanych.
+     *
+     * Kuglarz jest jedyną klasą bez mocy zadającej obrażenia i jedyną, która
+     * w każdym pomiarze ma najniższe eliminacje ORAZ najkrótsze przeżycie.
+     * Jego rekompensatą ma być najwyższe obrażenie z auto-ataku — a to działa
+     * tylko wtedy, gdy spowolniony przeciwnik naprawdę nie ucieknie.
+     */
+    slowMul: 0.48,
     durationTicks: Math.round(2.6 * TICK_HZ),
   },
 } as const;

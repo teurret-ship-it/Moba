@@ -60,6 +60,10 @@ describe('determinizm', () => {
       seq: tick + 1,
       moveX: Math.sin(tick * 0.1),
       moveY: Math.cos(tick * 0.13),
+      // Celowanie ręczne co jakiś czas — determinizm musi obejmować także
+      // tę ścieżkę, nie tylko automat.
+      aimX: tick % 30 === 0 ? Math.sin(tick * 0.2) : 0,
+      aimY: tick % 30 === 0 ? Math.cos(tick * 0.2) : 0,
       dash: tick % 137 === 0,
       stealth: tick % 311 === 0,
       burst: tick % 223 === 0,

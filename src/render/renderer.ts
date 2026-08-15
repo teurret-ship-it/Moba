@@ -81,6 +81,7 @@ export class ArenaRenderer {
   private elapsed = 0;
   private readonly projectionScratch = new THREE.Vector3();
   private objectiveGroup: THREE.Group | null = null;
+  private aimIndicator: THREE.Mesh | null = null;
   private objectiveRing!: THREE.Mesh;
   private objectiveFill!: THREE.Mesh;
   private objectiveBeam!: THREE.Sprite;
@@ -188,6 +189,47 @@ export class ArenaRenderer {
 
   private applyPixelRatio(): void {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, this.quality.pixelRatioCap));
+  }
+
+  /**
+   * Wskaźnik celowania — pas na ziemi od postaci w stronę przeciągnięcia.
+   *
+   * Ręczne celowanie bez wskaźnika jest zgadywaniem: kciuk zasłania połowę
+   * ekranu, a kierunek przeciągnięcia po przycisku nie ma nic wspólnego
+   * z tym, gdzie stoi postać. Rzut na ziemię, a nie linia na HUD, bo pas
+   * na podłożu od razu mówi też ZASIĘG — czyli drugą rzecz, której gracz
+   * nie zna, a która decyduje, czy trafi.
+   */
+  setAim(active: boolean, x: number, y: number, angle: number, range: number): void {
+    if (!this.aimIndicator) {
+      const geo = new THREE.PlaneGeometry(1, 1);
+      const mat = new THREE.MeshBasicMaterial({
+        color: 0x4fc3f7,
+        transparent: true,
+        opacity: 0.28,
+        depthWrite: false,
+      });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.rotation.x = -Math.PI / 2;
+      mesh.renderOrder = 2;
+      this.aimIndicator = mesh;
+      this.scene.add(mesh);
+    }
+
+    const mesh = this.aimIndicator;
+    mesh.visible = active;
+    if (!active) return;
+
+    // Pas idzie OD postaci, więc jego środek leży w połowie zasięgu.
+    mesh.scale.set(range, 1.1, 1);
+    mesh.position.set(
+      x + Math.cos(angle) * range * 0.5,
+      0.06,
+      -(y + Math.sin(angle) * range * 0.5),
+    );
+    // Płaszczyzna leży już obrócona o -90° wokół X, więc kierunek na ziemi
+    // ustawiamy jej własnym Z.
+    mesh.rotation.z = -angle;
   }
 
   /** Adaptacja jakości do zmierzonego czasu klatki — patrz `quality.ts`. */
@@ -671,6 +713,7 @@ export class ArenaRenderer {
   }
 
   reset(): void {
+    if (this.aimIndicator) this.aimIndicator.visible = false;
     for (const visual of this.players.values()) {
       this.scene.remove(visual.root);
       (visual.body.material as THREE.SpriteMaterial).dispose();

@@ -1052,3 +1052,12 @@ body[data-handed='left'] .hint--buttons {
   right: auto;
   left: calc(var(--safe-left) + 14px);
 }
+
+/* Przycisk w trybie celowania: przeciągasz, więc widzisz, że przeciągasz.
+   Bez tego sygnału ręczne celowanie jest niewidoczne aż do puszczenia
+   palca — a wtedy jest już za późno, żeby poprawić kierunek. */
+.action-btn.is-aiming {
+  border-color: var(--accent);
+  background: rgba(30, 62, 88, 0.95);
+  transform: scale(1.06);
+}

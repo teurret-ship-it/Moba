@@ -70,6 +70,11 @@ export function computeBotInput(world: World, bot: PlayerState, rng: Rng): Input
     seq: world.tick,
     moveX: 0,
     moveY: 0,
+    // Boty celują automatycznie — to znaczy tak, jak gracz, który tapnął
+    // przycisk zamiast przeciągać. Świadomie: bot celujący idealnie ręcznie
+    // czyta się jako bot po kilkunastu sekundach (sekcja 7).
+    aimX: 0,
+    aimY: 0,
     dash: false,
     stealth: false,
     burst: false,
@@ -423,8 +428,13 @@ function chooseAbilities(
     } else if (cls.power === 'sidla') {
       // Sidła nie zabijają — bot używa ich, gdy ucieka albo goni, czyli
       // wtedy, gdy liczy się różnica prędkości.
+      //
+      // Zasięg liczy się od DYSTANSU RZUTU, nie od promienia pola. Gdy pole
+      // przestało wybuchać pod nogami, a warunek został przy promieniu,
+      // bot zaczął używać Sideł rzadziej niż przedtem — dokładnie odwrotnie
+      // do zamiaru zmiany.
       wants =
-        distToTarget < POWER_ABILITY.sidla.radius * 0.9 &&
+        distToTarget < POWER_ABILITY.sidla.throwRange * 0.95 &&
         (brain.mood === 'flee' || brain.mood === 'hunt');
     } else {
       // Rozdarcie: z bliska, a z ukrycia zawsze — to jest cała zasadzka Widma.

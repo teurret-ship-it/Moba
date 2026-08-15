@@ -42,6 +42,8 @@ function runLoop(latencyTicks: number, ticks = 260): Loop {
       seq: t + 1,
       moveX: steering ? Math.sin(t * 0.07) : 0,
       moveY: steering ? Math.cos(t * 0.05) : 0,
+      aimX: 0,
+      aimY: 0,
       dash: false,
       stealth: false,
       burst: false,

@@ -147,9 +147,12 @@ export function tryStartTrick(world: World, p: PlayerState, input: InputFrame): 
     // nacierasz — kopia ląduje między wami i zamiana jest wejściem.
     // Zobowiązanie zostaje: kopia jest nieruchomym punktem, który zdradza,
     // gdzie zamierzasz być.
-    const moveLen = Math.hypot(input.moveX, input.moveY);
-    const dirX = moveLen > 0.1 ? input.moveX / moveLen : Math.cos(p.facing);
-    const dirY = moveLen > 0.1 ? input.moveY / moveLen : Math.sin(p.facing);
+    // Kopię też da się rzucić celowo: przeciągnięcie po przycisku wygrywa
+    // z kierunkiem marszu. Bez tego Kuglarz jako jedyny nie miałby dostępu
+    // do ręcznego celowania, a to jego kit jest o miejscu na planszy.
+    const aim = resolveAimNoTarget(p, input);
+    const dirX = aim.x;
+    const dirY = aim.y;
     const spot = { x: p.x + dirX * def.throwDistance, y: p.y + dirY * def.throwDistance, vx: 0, vy: 0 };
     const far = Math.hypot(spot.x, spot.y);
     const limit = ARENA_RADIUS - PLAYER_RADIUS;
@@ -171,6 +174,7 @@ export function tryStartTrick(world: World, p: PlayerState, input: InputFrame): 
       colorIndex: p.colorIndex,
       classId: p.classId,
       endTick: world.tick + def.durationTicks + p.stats.decoyBonusTicks,
+      cdAttack: world.tick + def.attackCooldownTicks,
     });
     p.cdTrick = world.tick + Math.round(def.cooldownTicks * p.stats.cooldownMul);
     world.events.push({ type: 'decoySpawn', player: p.id, x: spot.x, y: spot.y, tick: world.tick });
@@ -195,6 +199,68 @@ export function stepShields(world: World): void {
   }
 }
 
+// --- Celowanie ---------------------------------------------------------------
+
+/**
+ * Rozstrzygnięcie kierunku umiejętności.
+ *
+ * Standard rynkowy tego gatunku na telefonie: tapnięcie = celowanie
+ * automatyczne, przeciągnięcie = ręczne. Obie ścieżki schodzą się tutaj,
+ * po stronie serwera, bo klient przysyła co najwyżej WEKTOR, a nigdy
+ * gotowego celu ani trafienia.
+ *
+ * Kolejność jest ta sama, co w grach, z których jest wzięta:
+ *
+ *  1. **wektor od gracza** — przeciągnął, więc wie, czego chce,
+ *  2. **automat na najbliższego widocznego wroga** w zasięgu umiejętności,
+ *  3. **kierunek marszu** — odpowiednik ustawienia „skok w stronę ruchu",
+ *  4. **kierunek patrzenia** — ostatnia deska ratunku, żeby przycisk nigdy
+ *     nie okazał się martwy.
+ *
+ * Automat celuje w zasięgu SAMEJ UMIEJĘTNOŚCI, nie auto-ataku: inaczej
+ * Rozdarcie o zasięgu 7,5 celowałoby wyłącznie w cele bliższe niż 6,0
+ * i wyglądałoby na zepsute.
+ */
+export function resolveAim(
+  world: World,
+  p: PlayerState,
+  input: InputFrame,
+  range: number,
+): { x: number; y: number } {
+  const len = Math.hypot(input.aimX, input.aimY);
+  // Wektor od klienta nie jest rozkazem — serwer go normalizuje.
+  if (len > 0.2) return { x: input.aimX / len, y: input.aimY / len };
+
+  const target = findAttackTarget(world, p, range);
+  if (target) {
+    const dx = target.x - p.x;
+    const dy = target.y - p.y;
+    const d = Math.hypot(dx, dy) || 1;
+    return { x: dx / d, y: dy / d };
+  }
+
+  const moveLen = Math.hypot(input.moveX, input.moveY);
+  if (moveLen > 0.1) return { x: input.moveX / moveLen, y: input.moveY / moveLen };
+
+  return { x: Math.cos(p.facing), y: Math.sin(p.facing) };
+}
+
+/**
+ * Celowanie bez naprowadzania na wroga.
+ *
+ * Dla Zwodu i slotu RUCH automat na najbliższego przeciwnika byłby szkodliwy:
+ * uciekający gracz dostawałby kopię (albo skok) prosto w stronę zagrożenia.
+ * Kolejność jest więc krótsza: przeciągnięcie, potem kierunek marszu,
+ * na końcu kierunek patrzenia.
+ */
+export function resolveAimNoTarget(p: PlayerState, input: InputFrame): { x: number; y: number } {
+  const aimLen = Math.hypot(input.aimX, input.aimY);
+  if (aimLen > 0.2) return { x: input.aimX / aimLen, y: input.aimY / aimLen };
+  const moveLen = Math.hypot(input.moveX, input.moveY);
+  if (moveLen > 0.1) return { x: input.moveX / moveLen, y: input.moveY / moveLen };
+  return { x: Math.cos(p.facing), y: Math.sin(p.facing) };
+}
+
 // --- Slot MOC ----------------------------------------------------------------
 
 export function tryStartPower(world: World, p: PlayerState, input: InputFrame): void {
@@ -206,7 +272,7 @@ export function tryStartPower(world: World, p: PlayerState, input: InputFrame): 
 
   if (power === 'salwa') {
     const def = POWER_ABILITY.salwa;
-    const target = findAttackTarget(world, p, def.range);
+    const target = aimedTarget(world, p, input, def.range);
     // Salwa bez celu nie odpala — nie marnujemy odnowienia na powietrze.
     if (!target) return;
     p.salvoLeft = def.shots + p.stats.salvoBonusShots;
@@ -220,8 +286,85 @@ export function tryStartPower(world: World, p: PlayerState, input: InputFrame): 
   const windup = def.windupTicks;
   const cooldown = def.cooldownTicks;
 
+  // Rozdarcie jest stożkiem, więc kierunek jest całą jego treścią. Fala
+  // i Sidła są okręgami wokół postaci — tam celowanie niczego nie zmienia
+  // i udawanie, że zmienia, byłoby kłamstwem interfejsu.
+  //
+  // Kierunek zapamiętujemy TERAZ, a nie odczytujemy przy detonacji: między
+  // wciśnięciem a wyjściem ciosu mija zwłoka, a w tym czasie auto-atak
+  // przestawia `facing` na własny cel. Bez tego ręczne celowanie nie
+  // działało dokładnie wtedy, gdy jest potrzebne — w trakcie walki.
+  if (power === 'rozdarcie') {
+    const aim = resolveAim(world, p, input, POWER_ABILITY.rozdarcie.range);
+    p.powerFacing = Math.atan2(aim.y, aim.x);
+  }
+
+  // Sidła są rzucane, nie wybuchają pod nogami.
+  //
+  // Standard gatunku dla obszarowej kontroli: pole stawia się TAM, gdzie
+  // przeciwnik będzie, a nie tam, gdzie stoisz. Krąg wokół siebie miał sens
+  // dla Fali (Kolos wchodzi w tłum i wybija), ale dla Kuglarza — klasy o
+  // miejscu na planszy — odbierał umiejętności całą treść: żeby kogoś
+  // spowolnić, trzeba było najpierw do niego podejść.
+  if (power === 'sidla') {
+    const def = POWER_ABILITY.sidla;
+    const aim = resolveAim(world, p, input, def.throwRange);
+    const target = findAttackTarget(world, p, def.throwRange);
+    // Tapnięcie rzuca w cel (jeśli jest), przeciągnięcie na pełny dystans
+    // we wskazaną stronę.
+    const manual = Math.hypot(input.aimX, input.aimY) > 0.2;
+    const reach = !manual && target
+      ? Math.min(def.throwRange, Math.hypot(target.x - p.x, target.y - p.y))
+      : def.throwRange;
+    p.powerX = p.x + aim.x * reach;
+    p.powerY = p.y + aim.y * reach;
+  }
+
   p.powerFireTick = world.tick + windup;
   p.cdPower = world.tick + Math.round(cooldown * p.stats.cooldownMul);
+}
+
+/**
+ * Cel Salwy: ręcznie wskazany, jeśli gracz przeciągnął, inaczej najbliższy.
+ *
+ * „Ręcznie wskazany" znaczy tu: najbliższy prawidłowy cel do KIERUNKU, który
+ * gracz pokazał — a nie dowolny punkt. Salwa trafia w postać, nie w ziemię,
+ * więc celowanie wybiera ofiarę, nie współrzędne.
+ */
+function aimedTarget(
+  world: World,
+  p: PlayerState,
+  input: InputFrame,
+  range: number,
+): PlayerState | null {
+  const len = Math.hypot(input.aimX, input.aimY);
+  if (len <= 0.2) return findAttackTarget(world, p, range);
+
+  const ax = input.aimX / len;
+  const ay = input.aimY / len;
+  let best: PlayerState | null = null;
+  let bestScore = -Infinity;
+
+  for (const other of world.players) {
+    if (other.id === p.id || !other.alive) continue;
+    if (isStealthed(other, world.tick)) continue;
+    const dx = other.x - p.x;
+    const dy = other.y - p.y;
+    const d = Math.hypot(dx, dy);
+    if (d > range || d < 1e-4) continue;
+    if (!hasLineOfSight(p.x, p.y, other.x, other.y, world.obstacles)) continue;
+    // Zgodność kierunku waży więcej niż odległość: gracz pokazał, w którą
+    // stronę strzela, i ma dostać to, a nie to, co bliżej.
+    const align = (dx / d) * ax + (dy / d) * ay;
+    if (align < 0.35) continue;
+    const score = align * 2 - d / range;
+    if (score > bestScore) {
+      bestScore = score;
+      best = other;
+    }
+  }
+
+  return best ?? findAttackTarget(world, p, range);
 }
 
 /** Detonacja mocy, których windup już minął, oraz kolejne strzały Salwy. */
@@ -332,12 +475,16 @@ function fireBurst(world: World, p: PlayerState): void {
  */
 function fireRend(world: World, p: PlayerState): void {
   const def = POWER_ABILITY.rozdarcie;
+  const facing = p.powerFacing;
+  // Postać obraca się w stronę własnego ciosu — inaczej sylwetka pokazywałaby
+  // co innego niż stożek obrażeń.
+  p.facing = facing;
   world.events.push({
     type: 'rend',
     player: p.id,
     x: p.x,
     y: p.y,
-    facing: p.facing,
+    facing,
     tick: world.tick,
   });
 
@@ -378,19 +525,23 @@ function fireRend(world: World, p: PlayerState): void {
  */
 function fireSnare(world: World, p: PlayerState): void {
   const def = POWER_ABILITY.sidla;
+  const cx = p.powerX;
+  const cy = p.powerY;
   world.events.push({
     type: 'snare',
     player: p.id,
-    x: p.x,
-    y: p.y,
+    x: cx,
+    y: cy,
     radius: def.radius,
     tick: world.tick,
   });
 
   for (const other of world.players) {
     if (other.id === p.id || !other.alive) continue;
-    const d = Math.hypot(other.x - p.x, other.y - p.y);
+    const d = Math.hypot(other.x - cx, other.y - cy);
     if (d > def.radius) continue;
+    // Widoczność liczona od RZUCAJĄCEGO, nie od środka pola: inaczej dałoby
+    // się spowalniać zza muru, którego się nie widzi.
     if (!hasLineOfSight(p.x, p.y, other.x, other.y, world.obstacles)) continue;
 
     other.slowEndTick = world.tick + def.durationTicks + p.stats.snareBonusTicks;
@@ -408,8 +559,54 @@ export function stepDecoys(world: World): void {
     if (world.tick >= d.endTick || d.hp <= 0 || !owner || !owner.alive) {
       world.events.push({ type: 'decoyBreak', x: d.x, y: d.y, tick: world.tick });
       world.decoys.splice(i, 1);
+      continue;
     }
+
+    // Kopia STRZELA.
+    //
+    // Standard gatunku dla klonów jest jednoznaczny: klon bije, tylko słabiej.
+    // I to jest dokładnie ta rzecz, której Kuglarzowi brakowało — jako jedyna
+    // klasa nie ma mocy zadającej obrażenia i w każdym pomiarze miał najniższe
+    // eliminacje ORAZ najkrótsze przeżycie w stawce. Kopia, która tylko
+    // pochłania ciosy, jest kosztem przeciwnika, ale nie jest groźbą; kopia,
+    // która strzela, zmusza go do decyzji — bić w nią czy w ciebie.
+    //
+    // Obrażenia idą na konto WŁAŚCICIELA: to on je zdobył, stawiając kopię
+    // w dobrym miejscu, i to on ma dostać za nie doświadczenie.
+    if (world.tick < d.cdAttack) continue;
+    const def = TRICK_ABILITY.zwod;
+    const target = findAttackTargetAt(world, d.x, d.y, owner, def.attackRange);
+    if (!target) continue;
+    d.cdAttack = world.tick + def.attackCooldownTicks;
+    applyDamage(
+      world,
+      target,
+      owner.stats.attackDamage * def.damageShare * damageMultiplier(owner, world.tick),
+      owner.id,
+    );
   }
+}
+
+/** Wybór celu z DOWOLNEGO punktu — używany przez Zwód, który stoi osobno. */
+function findAttackTargetAt(
+  world: World,
+  x: number,
+  y: number,
+  owner: PlayerState,
+  range: number,
+): PlayerState | null {
+  let best: PlayerState | null = null;
+  let bestDist = range;
+  for (const other of world.players) {
+    if (other.id === owner.id || !other.alive) continue;
+    if (isStealthed(other, world.tick)) continue;
+    const d = Math.hypot(other.x - x, other.y - y);
+    if (d >= bestDist) continue;
+    if (!hasLineOfSight(x, y, other.x, other.y, world.obstacles)) continue;
+    bestDist = d;
+    best = other;
+  }
+  return best;
 }
 
 /**
@@ -606,7 +803,15 @@ export function killPlayer(world: World, victim: PlayerState, killerId: number):
     // z powrotem i nagradza dokładnie to, do czego jest zbudowana — zamiast
     // podnosić jej obrażenia w otwartym polu, którego i tak nie ma wygrywać.
     if (getClass(killer.classId).trickResetOnKill && killer.alive) {
-      killer.cdTrick = world.tick;
+      // Połowa pozostałego odnowienia, nie całość.
+      //
+      // Pełny reset był dobrany wtedy, gdy Rozdarcie w praktyce chybiało
+      // i klasa potrzebowała wszystkiego, co się dało. Po naprawieniu
+      // celowania ten sam bonus zaczął się kumulować: eliminacja daje ukrycie,
+      // ukrycie daje zasadzkę, zasadzka daje eliminację. Połowa zostawia
+      // nagrodę, ale przerywa pętlę.
+      const left = Math.max(0, killer.cdTrick - world.tick);
+      killer.cdTrick = world.tick + Math.floor(left / 2);
     }
   }
 

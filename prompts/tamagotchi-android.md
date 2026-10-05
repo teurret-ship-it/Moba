@@ -51,7 +51,8 @@ zwierzakiem. Robocza nazwa: „Kłębek” (zmieniasz ją w jednym miejscu:
 
 Twoja miara to rynek, nie „działa”. Każda funkcja ma dorównywać liderom
 gatunku: Tamagotchi Uni/Paradise, Pou, My Talking Tom 2 / Friends, Finch,
-Pokémon Sleep, Neopets, Adopt Me!. Jeśli funkcja wygląda gorzej niż u nich,
+Pokémon Sleep, Neopets, Adopt Me!, a w zawodach: Chao Garden,
+Nintendogs, Trackmania, Fall Guys. Jeśli funkcja wygląda gorzej niż u nich,
 iteracja nie jest skończona.
 
 To zadanie ma dwie części:
@@ -66,9 +67,9 @@ w „PROTOKÓŁ ITERACJI” obowiązuje od teraz.
 
 Zdanie retencji (wszystko inne ma mu służyć):
 „Gracz opiekuje się zwierzakiem, który żyje w czasie rzeczywistym, żeby
-wychować go w unikalną dorosłą formę i pokazać go znajomym, i wraca jutro,
-bo zwierzak go potrzebuje, czeka na niego coś nowego, a znajomi odwiedzają
-jego pokój.”
+wychować go w unikalną dorosłą formę i pokonać znajomych w zawodach, i wraca
+jutro, bo zwierzak go potrzebuje, czeka na niego coś nowego, a ktoś właśnie
+pobił jego rekord.”
 
 Grupa docelowa: casual, 10+ lat (projektujemy pod Google Play Families
 Policy, nawet jeśli w konsoli wybierzemy 13+). Sesja 1–5 minut, 3–6 sesji
@@ -82,6 +83,10 @@ Filary (każda iteracja wzmacnia przynajmniej jeden):
 3. WŁASNY ŚWIAT: kosmetyki, pokój do urządzenia, kolekcje.
 4. RAZEM: znajomi, odwiedziny, prezenty, wspólne wydarzenia.
 5. ZAWSZE COŚ NOWEGO: zadania dzienne, wydarzenia sezonowe, przepustka.
+6. ZAWODY: zwierzaki startują przeciw sobie online w wyścigach, na torze
+   sprawnościowym (agility) i w platformówkach na czas. Opieka i trening
+   przekładają się na formę startową, ale o wyniku decyduje umiejętność
+   gracza.
 
 ══════════════════════════════════════════════════════════════════════
 2. ZASADY NIENARUSZALNE (łamiesz je = iteracja odrzucona)
@@ -141,6 +146,21 @@ Inżynieria:
   zmienne środowiskowe / `local.properties` (w .gitignore).
 - Assety tylko z licencją, którą da się udokumentować (własne,
   proceduralne, CC0). Każdy asset ma wpis w `docs/ASSETS.md`.
+- Zawody są deterministyczne: fizyka w `:core:sim` ma stały krok (60 Hz)
+  i arytmetykę stałoprzecinkową. Przebieg to ziarno + zapis wejść gracza.
+  Serwer odtwarza zapis i sam liczy czas, więc klient nigdy nie zgłasza
+  wyniku. Ten sam zapis jest duchem (ghost) i powtórką.
+
+Uczciwa rywalizacja:
+- Statystyk zwierzaka (szybkość, wytrzymałość, zwinność, skoczność) nie da
+  się kupić. Rosną tylko z treningu i opieki.
+- Różnica czasu wynikająca ze statystyk wynosi najwyżej 10% między
+  najsłabszym a najsilniejszym zwierzakiem w danej lidze. Resztę rozstrzyga
+  umiejętność. Kosmetyki nie dają żadnej przewagi.
+- Dobór przeciwników według ratingu i dywizji statystyk. Nowicjusz nie
+  trafia na weterana.
+- Tryb wspomagany (auto-skok, wolniejsze tempo) jest dostępny dla każdego,
+  ale przejazdy w nim nie liczą się do rankingów.
 
 ══════════════════════════════════════════════════════════════════════
 3. ARCHITEKTURA I STACK (zmiana tylko przez ADR z uzasadnieniem)
@@ -295,6 +315,15 @@ zmierzyć):
 - Neopets / Adopt Me!: ekonomia, kolekcje, wydarzenia sezonowe, bezpieczna
   komunikacja przez gotowe frazy, handel (u nas: tylko prezenty, bez handlu,
   ze względu na dzieci).
+- Chao Garden (Sonic Adventure 2): wzorzec spięcia opieki z zawodami.
+  Karmienie i trening zmieniają statystyki, a zwierzak startuje w wyścigach
+  i turniejach.
+- Nintendogs: agility, frisbee, posłuszeństwo jako zawody z klasami
+  i pucharami.
+- Trackmania: przejazdy na czas, duchy, medale brąz/srebro/złoto/autor,
+  serwerowa walidacja powtórek, rankingi tygodniowe.
+- Fall Guys: wyścigi z przeszkodami dla wielu graczy, czytelne i zabawne
+  porażki, krótkie rundy, eliminacje.
 
 ══════════════════════════════════════════════════════════════════════
 7. ROADMAPA (zapisz do docs/ROADMAP.md jako checklistę)
@@ -339,66 +368,97 @@ FAZA 0: FUNDAMENT I RDZEŃ OFFLINE (bramka: „chcę tu wrócić jutro”)
        Bramka fazy: plik `docs/PLAYTEST.md` z protokołem (5 osób, czy wracają
        w dniu 2 bez proszenia).
 
-FAZA 1: TREŚĆ I EKONOMIA
+FAZA 1: TREŚĆ, EKONOMIA I ZAWODY OFFLINE
 [ ] 10. Waluta miękka i model ekonomii w `:core:sim` (źródła/ujścia,
         symulacja 30 dni gry w teście, inflacja ≤ ustalony próg).
-[ ] 11–13. Trzy mini-gry (zręcznościowa, logiczna, rytmiczna), 60–90 s każda,
-        nagroda zależna od wyniku z dziennym limitem, rekord lokalny.
-[ ] 14. Sklep i spiżarnia: jedzenie o różnych efektach, ulubione smaki
+[ ] 11. Silnik zawodów w `:core:sim`: stały krok 60 Hz, fizyka
+        stałoprzecinkowa, zapis wejść, powtórka daje identyczny wynik co do
+        klatki (test), duch z zapisu. Statystyki zwierzaka z ograniczonym
+        wpływem (sekcja 2, „Uczciwa rywalizacja”), test na limit 10%.
+[ ] 12. Wyścig: sprint z zarządzaniem wytrzymałością i zmianą toru,
+        3 trasy po 45–60 s, duch własnego rekordu, odliczanie startowe,
+        meta z powtórką ostatnich sekund.
+[ ] 13. Tor sprawnościowy (agility): slalom, tunel, kładka, skok przez
+        płotek, opona. Kary czasowe za błędy, sterowanie jedną ręką.
+[ ] 14. Platformówka na czas: poziomy 30–90 s, skok i podwójny skok,
+        punkty kontrolne, natychmiastowy restart, medale brąz/srebro/złoto/
+        autor.
+[ ] 15. Trening i forma: ćwiczenia podnoszą statystyki kosztem energii
+        i głodu, z dziennym limitem. Głodny, zmęczony albo chory zwierzak
+        startuje słabiej, więc opieka ma znaczenie w zawodach.
+[ ] 16. Sklep i spiżarnia: jedzenie o różnych efektach, ulubione smaki
         zwierzaka (osobowość).
-[ ] 15. Garderoba: kosmetyki na rigu (czapki, okulary, szaliki), podgląd
-        przed zakupem.
-[ ] 16. Pokój: urządzanie na siatce, meble wpływają na nastrój, tapety, kilka
-        pokoi (kuchnia, łazienka, sypialnia, bawialnia jako miejsca akcji).
-[ ] 17. Zadania dzienne i tygodniowe, seria logowań z zamrożeniem,
+[ ] 17. Garderoba: kosmetyki na rigu (czapki, okulary, szaliki), widoczne
+        także w zawodach, z podglądem przed zakupem.
+[ ] 18. Pokój: urządzanie na siatce, meble wpływają na nastrój, tapety,
+        półka z pucharami z zawodów, kilka pokoi (kuchnia, łazienka,
+        sypialnia, bawialnia).
+[ ] 19. Zadania dzienne i tygodniowe, seria logowań z zamrożeniem,
         osiągnięcia.
-[ ] 18. Osobowość: cechy zwierzaka wynikające z historii opieki, wpływające
-        na reakcje i dialogi (dymki z obrazkami).
+[ ] 20. Osobowość: cechy zwierzaka wynikające z historii opieki, wpływające
+        na reakcje, dialogi (dymki z obrazkami) i styl biegu w zawodach.
 
-FAZA 2: ONLINE
-[ ] 19. Konto anonimowe na serwerze, tokeny, migracja stanu lokalnego.
-[ ] 20. Synchronizacja offline-first: serwer autorytatywny, kolejka akcji
+FAZA 2: ONLINE I ZAWODY SIECIOWE
+[ ] 21. Konto anonimowe na serwerze, tokeny, migracja stanu lokalnego.
+[ ] 22. Synchronizacja offline-first: serwer autorytatywny, kolejka akcji
         z kluczami idempotencji, rozwiązywanie konfliktów. Test „dwa
         urządzenia, jeden zwierzak”.
-[ ] 21. Ekonomia na serwerze: walidacja transakcji, anty-cheat czasu (test
+[ ] 23. Ekonomia na serwerze: walidacja transakcji, anty-cheat czasu (test
         z cofniętym zegarem klienta).
-[ ] 22. Powiązanie z Google (Credential Manager), usunięcie konta.
-[ ] 23. Znajomi: kody/QR, zaproszenia, lista, blokowanie i zgłaszanie.
-[ ] 24. Odwiedziny: pokój znajomego, wspólne głaskanie/karmienie z bonusem
+[ ] 24. Powiązanie z Google (Credential Manager), usunięcie konta.
+[ ] 25. Znajomi: kody/QR, zaproszenia, lista, blokowanie i zgłaszanie.
+[ ] 26. Odwiedziny: pokój znajomego, wspólne głaskanie/karmienie z bonusem
         dla obu stron, księga gości z naklejkami.
-[ ] 25. Prezenty i gotowe frazy (bezpieczna komunikacja).
-[ ] 26. Tygodniowe rankingi mini-gier (wśród znajomych i globalnie),
-        walidacja wyników po stronie serwera.
-[ ] 27. Push przez FCM (za interfejsem, z fallbackiem na WorkManager).
+[ ] 27. Prezenty i gotowe frazy (bezpieczna komunikacja).
+[ ] 28. Zawody asynchroniczne: start przeciw duchom innych graczy dobranym
+        według ratingu (np. Glicko-2) i dywizji statystyk. Serwer odtwarza
+        zapis wejść i zatwierdza czas, a niezgodne zapisy odrzuca (test).
+        Tygodniowe rankingi każdej trasy: znajomi, kraj, świat.
+[ ] 29. Ligi i puchary: dywizje z tygodniowym awansem i spadkiem, puchary
+        weekendowe, nagrody wyłącznie kosmetyczne + trofeum do pokoju.
+[ ] 30. Zawody na żywo: lobby 4–8 zwierzaków (znajomi albo dobór; po 10 s
+        braki uzupełniają duchy). WebSocket, serwer autorytatywny,
+        predykcja i rekoncyliacja po stronie klienta, gra płynna przy
+        opóźnieniu 150 ms i 2% utraty pakietów (test z symulowaną siecią).
+        Reakcje emotkami zamiast czatu.
+[ ] 31. Powtórki i widownia: oglądanie przejazdu rekordzisty i znajomych,
+        nauka z ducha, udostępnianie klipu z przejazdu.
+[ ] 32. Push przez FCM (za interfejsem, z fallbackiem na WorkManager),
+        w tym „znajomy pobił twój rekord” z limitem z sekcji 2.
 
 FAZA 3: LIVEOPS I MONETYZACJA
-[ ] 28. Zdalna konfiguracja i flagi funkcji z serwera (z wartościami
+[ ] 33. Zdalna konfiguracja i flagi funkcji z serwera (z wartościami
         domyślnymi w aplikacji).
-[ ] 29. Kalendarz wydarzeń sezonowych (serwerowy), pierwsze wydarzenie
-        z tematycznymi kosmetykami i mini-zadaniami.
-[ ] 30. Przepustka sezonowa (darmowa ścieżka + płatna, wyłącznie
+[ ] 34. Kalendarz wydarzeń sezonowych (serwerowy). Pierwsze wydarzenie:
+        sezonowe Grand Prix z tymczasową trasą, tematycznymi kosmetykami
+        i mini-zadaniami.
+[ ] 35. Przepustka sezonowa (darmowa ścieżka + płatna, wyłącznie
         kosmetyki).
-[ ] 31. Google Play Billing (najnowsza wersja biblioteki), walidacja
+[ ] 36. Google Play Billing (najnowsza wersja biblioteki), walidacja
         paragonów na serwerze, przywracanie zakupów, kontrola rodzicielska
         zakupów.
-[ ] 32. Nagradzane reklamy z UMP, tryb dla dzieci, limit dzienny.
-[ ] 33. Analityka z poszanowaniem prywatności: lejek FTUE, retencja,
-        ekonomia. Panel KPI w `docs/KPI.md` + testy A/B przez flagi.
-[ ] 34. Pokolenia: dorosły zwierzak może zostać rodzicem, potomek dziedziczy
-        geny, a gracz buduje drzewo rodowe i album pokoleń.
+[ ] 37. Nagradzane reklamy z UMP, tryb dla dzieci, limit dzienny.
+[ ] 38. Analityka z poszanowaniem prywatności: lejek FTUE, retencja,
+        ekonomia, udział w zawodach. Panel KPI w `docs/KPI.md` + testy A/B
+        przez flagi.
+[ ] 39. Pokolenia: dorosły zwierzak może zostać rodzicem, potomek dziedziczy
+        geny i część predyspozycji do zawodów, a gracz buduje drzewo rodowe.
 
 FAZA 4: JAKOŚĆ PREMIUM I WYDANIE
-[ ] 35. Baseline Profiles + Macrobenchmark, budżety z sekcji 4 w CI.
-[ ] 36. Dostępność: audyt TalkBack, tryb dla daltonistów, ograniczenie
-        ruchu, duże przyciski.
-[ ] 37. Tablety i składane: układy dwupanelowe.
-[ ] 38. Lokalizacja: kolejne języki (DE, ES, PT-BR) i formaty dat/liczb.
-[ ] 39. Crashlytics lub odpowiednik, polityka prywatności, Data Safety,
+[ ] 40. Baseline Profiles + Macrobenchmark, budżety z sekcji 4 w CI
+        (zawody: stałe 60 fps na urządzeniu klasy średniej).
+[ ] 41. Dostępność: audyt TalkBack, tryb dla daltonistów, ograniczenie
+        ruchu, duże przyciski, tryb wspomagany w zawodach.
+[ ] 42. Tablety i składane: układy dwupanelowe.
+[ ] 43. Lokalizacja: kolejne języki (DE, ES, PT-BR) i formaty dat/liczb.
+[ ] 44. Crashlytics lub odpowiednik, polityka prywatności, Data Safety,
         zgodność z Families Policy (checklista w docs).
-[ ] 40. Pipeline wydania: podpisany AAB, Gradle Play Publisher na ścieżkę
+[ ] 45. Pipeline wydania: podpisany AAB, Gradle Play Publisher na ścieżkę
         wewnętrzną, wersjonowanie, notatki wydania z CHANGELOG.
 Dalej: analiza luk z BENCHMARK.md wyznacza kolejne iteracje (protokół
-pkt 2d), np. Wear OS, gesty głosowe, AR „zwierzak w pokoju”, kluby.
+pkt 2d), np. edytor tras z moderacją, sztafety drużynowe i kluby, nowe
+dyscypliny (pływanie, frisbee), Wear OS, AR „zwierzak w pokoju”.
+
 
 ══════════════════════════════════════════════════════════════════════
 8. ZADANIE TERAZ
@@ -461,6 +521,11 @@ Wariant „poprawki z playtestu” (gdy w `docs/FEEDBACK.md` są nowe zgłoszeni
   sposób, nawet gdy roadmapa się skończy (protokół pkt 2d).
 - **Twoje uwagi mają pierwszeństwo.** Zgłoszenia `[!]` w `docs/FEEDBACK.md`
   wyprzedzają roadmapę. Prawdziwy playtest jest ważniejszy niż plan.
+- **Zawody rozstrzyga serwer, nie telefon.** Gracz wysyła zapis swoich
+  ruchów, a serwer odtwarza przejazd tą samą fizyką i sam liczy czas.
+  Sfałszowany wynik po prostu się nie zgadza. Ten sam zapis służy za ducha
+  dla innych i za powtórkę. Dzięki temu zawody działają też przy małej
+  liczbie graczy: zawsze jest z kim się ścigać.
 - **Symulacja współdzielona przez aplikację i serwer.** Te same reguły
   liczą stan na telefonie (offline, przewidywanie) i na serwerze
   (autorytet, anty-cheat). Dzięki temu oszukanie zegara nic nie daje,
